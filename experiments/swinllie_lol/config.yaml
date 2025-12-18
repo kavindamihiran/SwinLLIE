@@ -1,0 +1,90 @@
+# Swin-LLIE Training Configuration
+# Configuration file for training on LOL Dataset
+
+# =============================================================================
+# Model Configuration
+# =============================================================================
+model:
+  name: "SwinLLIE"
+  img_size: 128
+  patch_size: 1
+  in_chans: 3
+  embed_dim: 60
+  depths: [4, 4, 4]
+  num_heads: [6, 6, 6]
+  window_size: 8
+  mlp_ratio: 2.0
+  qkv_bias: true
+  drop_rate: 0.0
+  attn_drop_rate: 0.0
+  drop_path_rate: 0.1
+  use_checkpoint: false
+  resi_connection: "1conv"
+  use_igam: true  # Enable Illumination-Guided Attention
+
+# =============================================================================
+# Dataset Configuration
+# =============================================================================
+dataset:
+  name: "lol"  # Options: lol, generic, unpaired
+  root_dir: "./datasets/LOL"  # Path to LOL dataset
+  patch_size: 96
+  num_workers: 4
+
+# =============================================================================
+# Training Configuration
+# =============================================================================
+training:
+  batch_size: 4
+  epochs: 100
+  
+  # Optimizer
+  optimizer: "adamw"
+  learning_rate: 0.0002
+  weight_decay: 0.0001
+  betas: [0.9, 0.999]
+  
+  # Learning rate scheduler
+  scheduler: "cosine"
+  warmup_epochs: 5
+  min_lr: 0.000001
+  
+  # Mixed precision training (faster on modern GPUs)
+  use_amp: true
+  
+  # Gradient clipping
+  grad_clip: 1.0
+  
+  # Checkpointing
+  save_dir: "./experiments/swinllie_lol"
+  save_freq: 10  # Save every N epochs
+  
+  # Logging
+  log_freq: 100  # Log every N iterations
+  use_tensorboard: true
+
+# =============================================================================
+# Loss Configuration  
+# =============================================================================
+loss:
+  lambda_l1: 1.0
+  lambda_vgg: 0.1
+  lambda_color: 0.5
+  lambda_smooth: 0.01
+  use_ssim: false
+  lambda_ssim: 0.1
+
+# =============================================================================
+# Validation Configuration
+# =============================================================================
+validation:
+  val_freq: 5  # Validate every N epochs
+  save_images: true
+  num_save_images: 5
+
+# =============================================================================
+# Resume Training
+# =============================================================================
+resume:
+  enabled: false
+  checkpoint_path: ""  # Path to checkpoint to resume from
