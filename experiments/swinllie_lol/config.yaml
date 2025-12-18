@@ -86,5 +86,5 @@ validation:
 # Resume Training
 # =============================================================================
 resume:
-  enabled: false
-  checkpoint_path: ""  # Path to checkpoint to resume from
+  enabled: true
+  checkpoint_path: "./experiments/swinllie_lol/checkpoints/final.pth"
