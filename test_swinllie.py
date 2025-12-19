@@ -147,7 +147,58 @@ def process_image(model, img_path, device, save_path=None, compare_gt=None):
     # Inference
     with torch.no_grad():
         start_time = time.time()
-        enhanced = model(img_tensor)
+        
+        # Check if tiling is needed (simple heuristic: if image is large)
+        # 8GB GPU can typically handle ~1MP-2MP depending on model size, but SwinIR is heavy.
+        # dark.jpeg is ~1MP (853x1280). Let's use tiling for dimensions > 800x800 approx to be safe.
+        use_tiling = h > 800 or w > 800
+        
+        if use_tiling:
+            # Tiled inference
+            tile_size = 512
+            tile_overlap = 32
+            
+            b, c, h, w = img_tensor.shape
+            enhanced = torch.zeros_like(img_tensor)
+            weights = torch.zeros_like(img_tensor)
+            
+            for y in range(0, h, tile_size - tile_overlap):
+                for x in range(0, w, tile_size - tile_overlap):
+                    y_end = min(y + tile_size, h)
+                    x_end = min(x + tile_size, w)
+                    y_start = max(0, y_end - tile_size)
+                    x_start = max(0, x_end - tile_size)
+                    
+                    # Extract tile
+                    tile = img_tensor[:, :, y_start:y_end, x_start:x_end]
+                    
+                    # Pad tile if needed (should satisfy window_size requirement)
+                    _, _, th, tw = tile.shape
+                    mod_pad_t = window_size * 8
+                    pad_h_t = (mod_pad_t - th % mod_pad_t) % mod_pad_t
+                    pad_w_t = (mod_pad_t - tw % mod_pad_t) % mod_pad_t
+                    
+                    if pad_h_t > 0 or pad_w_t > 0:
+                        tile = F.pad(tile, (0, pad_w_t, 0, pad_h_t), mode='reflect')
+                    
+                    # Process tile
+                    out_tile = model(tile)
+                    
+                    # Unpad
+                    if pad_h_t > 0 or pad_w_t > 0:
+                        out_tile = out_tile[:, :, :th, :tw]
+                        
+                    # Accumulate
+                    enhanced[:, :, y_start:y_end, x_start:x_end] += out_tile
+                    weights[:, :, y_start:y_end, x_start:x_end] += 1.0
+            
+            # Average overlapping areas
+            enhanced = enhanced / weights
+            
+        else:
+            # Full image inference (pad was already applied above if needed)
+            enhanced = model(img_tensor)
+            
         inference_time = time.time() - start_time
     
     # Remove padding
