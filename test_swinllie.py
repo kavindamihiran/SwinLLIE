@@ -110,7 +110,7 @@ def load_model(checkpoint_path, device, config=None):
     return model
 
 
-def process_image(model, img_path, device, save_path=None, compare_gt=None, max_size=512):
+def process_image(model, img_path, device, save_path=None, compare_gt=None):
     """
     Enhance a single low-light image.
     
@@ -120,7 +120,7 @@ def process_image(model, img_path, device, save_path=None, compare_gt=None, max_
         device: torch device
         save_path: Optional path to save enhanced image
         compare_gt: Optional path to ground truth for metrics
-        max_size: Maximum size for longest edge (images larger than this are resized)
+
     
     Returns:
         Enhanced image (numpy array), PSNR, SSIM (if GT provided)
@@ -128,15 +128,6 @@ def process_image(model, img_path, device, save_path=None, compare_gt=None, max_
     # Load image
     img = Image.open(img_path).convert('RGB')
     original_size = img.size  # (W, H)
-    
-    # Resize large images to prevent GPU OOM
-    was_resized = False
-    if max(img.size) > max_size:
-        ratio = max_size / max(img.size)
-        new_size = (int(img.width * ratio), int(img.height * ratio))
-        img = img.resize(new_size, Image.BICUBIC)
-        was_resized = True
-        print(f"  ↓ Resized {original_size} → {new_size} for processing")
     
     # Convert to tensor
     img_np = np.array(img).astype(np.float32) / 255.0
@@ -168,10 +159,6 @@ def process_image(model, img_path, device, save_path=None, compare_gt=None, max_
     enhanced_np = enhanced.squeeze(0).cpu().numpy().transpose(1, 2, 0)
     enhanced_np = (enhanced_np * 255).astype(np.uint8)
     
-    # Upscale back to original size if image was resized
-    if was_resized:
-        enhanced_np = cv2.resize(enhanced_np, original_size, interpolation=cv2.INTER_CUBIC)
-        print(f"  ↑ Upscaled result back to {original_size}")
     
     # Calculate metrics if ground truth provided
     psnr, ssim = None, None
@@ -192,7 +179,7 @@ def process_image(model, img_path, device, save_path=None, compare_gt=None, max_
     return enhanced_np, psnr, ssim, inference_time
 
 
-def process_folder(model, input_folder, output_folder, device, gt_folder=None, max_size=512):
+def process_folder(model, input_folder, output_folder, device, gt_folder=None):
     """
     Enhance all images in a folder.
     
@@ -202,7 +189,7 @@ def process_folder(model, input_folder, output_folder, device, gt_folder=None, m
         output_folder: Path to save enhanced images
         device: torch device
         gt_folder: Optional folder with ground truth images
-        max_size: Maximum size for longest edge (images larger than this are resized)
+
     
     Returns:
         Average PSNR, SSIM, inference time
@@ -241,7 +228,7 @@ def process_folder(model, input_folder, output_folder, device, gt_folder=None, m
                     break
         
         # Process image
-        _, psnr, ssim, inf_time = process_image(model, img_path, device, save_path, gt_path, max_size)
+        _, psnr, ssim, inf_time = process_image(model, img_path, device, save_path, gt_path)
         time_list.append(inf_time)
         
         # Print results
@@ -323,8 +310,6 @@ def main():
                         help='GPU ID to use')
     parser.add_argument('--save_comparison', action='store_true',
                         help='Save side-by-side comparisons')
-    parser.add_argument('--max_size', type=int, default=512,
-                        help='Max size for longest edge (larger images are resized, default: 512)')
     args = parser.parse_args()
     
     # Setup device
@@ -355,7 +340,7 @@ def main():
                     break
         
         enhanced, psnr, ssim, inf_time = process_image(
-            model, args.input, device, save_path, gt_path, args.max_size)
+            model, args.input, device, save_path, gt_path)
         
         print(f"\nInput: {args.input}")
         print(f"Output: {save_path}")
@@ -372,7 +357,7 @@ def main():
     
     elif os.path.isdir(args.input):
         # Folder of images
-        process_folder(model, args.input, args.output, device, args.gt_folder, args.max_size)
+        process_folder(model, args.input, args.output, device, args.gt_folder)
     
     else:
         print(f"Error: Input not found: {args.input}")
