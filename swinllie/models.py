@@ -160,8 +160,8 @@ class IlluminationGuidedAttention(nn.Module):
             nn.Sigmoid()  # α ∈ [0, 1]
         )
         
-        # Learnable base scaling parameter (initialized to 0.5)
-        self.base_alpha = nn.Parameter(torch.ones(1) * 0.5)
+        # Learnable base scaling parameter (initialized to 0.3 - reduced to prevent over-enhancement)
+        self.base_alpha = nn.Parameter(torch.ones(1) * 0.3)
         
         # Optional: spatial attention refinement
         self.spatial_refine = nn.Conv2d(1, 1, kernel_size=3, padding=1)
@@ -185,12 +185,16 @@ class IlluminationGuidedAttention(nn.Module):
         if dark_mask.shape[2:] != features.shape[2:]:
             dark_mask = F.interpolate(dark_mask, size=(H, W), mode='bilinear', align_corners=False)
         
-        # 3. Refine spatial attention
+        # 3. Refine spatial attention with SUPPRESSION for bright regions
         refined_mask = torch.sigmoid(self.spatial_refine(dark_mask))
         
-        # 4. Apply illumination-guided modulation
-        # F_out = F_in * (1 + base_α * α * M)
-        modulation = 1.0 + self.base_alpha * alpha * refined_mask
+        # 4. FIXED: Suppress bright regions - only enhance dark areas
+        # Clamp refined_mask to ensure bright regions (low dark_mask) get minimal enhancement
+        suppression = torch.clamp(refined_mask - 0.3, min=0.0)  # Threshold at 0.3
+        
+        # 5. Apply illumination-guided modulation (only to dark regions)
+        # F_out = F_in * (1 + base_α * α * suppressed_mask)
+        modulation = 1.0 + self.base_alpha * alpha * suppression
         modulated_features = features * modulation
         
         return modulated_features
