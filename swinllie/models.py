@@ -232,9 +232,13 @@ class WindowAttention(nn.Module):
     Standard Swin Transformer attention mechanism.
     
     Args:
-        dim: Number of input channels
-        window_size: Size of attention window
-        num_heads: Number of attention heads
+        dim (int): Number of input channels.
+        window_size (tuple[int]): The height and width of the window.
+        num_heads (int): Number of attention heads.
+        qkv_bias (bool, optional):  If True, add a learnable bias to query, key, value. Default: True
+        qk_scale (float | None, optional): Override default qk scale of head_dim ** -0.5 if set
+        attn_drop (float, optional): Dropout ratio of attention weight. Default: 0.0
+        proj_drop (float, optional): Dropout ratio of output. Default: 0.0
     """
     
     def __init__(self, dim, window_size, num_heads, qkv_bias=True, 
@@ -304,6 +308,21 @@ class WindowAttention(nn.Module):
 class SwinTransformerBlock(nn.Module):
     """
     Swin Transformer Block with W-MSA and SW-MSA.
+    
+    Args:
+        dim (int): Number of input channels.
+        input_resolution (tuple[int]): Input resulotion.
+        num_heads (int): Number of attention heads.
+        window_size (int): Window size.
+        shift_size (int): Shift size for SW-MSA.
+        mlp_ratio (float): Ratio of mlp hidden dim to embedding dim.
+        qkv_bias (bool, optional): If True, add a learnable bias to query, key, value. Default: True
+        qk_scale (float | None, optional): Override default qk scale of head_dim ** -0.5 if set.
+        drop (float, optional): Dropout rate. Default: 0.0
+        attn_drop (float, optional): Attention dropout rate. Default: 0.0
+        drop_path (float, optional): Stochastic depth rate. Default: 0.0
+        act_layer (nn.Module, optional): Activation layer. Default: nn.GELU
+        norm_layer (nn.Module, optional): Normalization layer.  Default: nn.LayerNorm
     """
     
     def __init__(self, dim, input_resolution, num_heads, window_size=7, shift_size=0,
@@ -403,7 +422,24 @@ class SwinTransformerBlock(nn.Module):
 
 
 class BasicLayer(nn.Module):
-    """A basic Swin Transformer layer for one stage."""
+    """A basic Swin Transformer layer for one stage.
+    
+    Args:
+        dim (int): Number of input channels.
+        input_resolution (tuple[int]): Input resolution.
+        depth (int): Number of blocks.
+        num_heads (int): Number of attention heads.
+        window_size (int): Local window size.
+        mlp_ratio (float): Ratio of mlp hidden dim to embedding dim.
+        qkv_bias (bool, optional): If True, add a learnable bias to query, key, value. Default: True
+        qk_scale (float | None, optional): Override default qk scale of head_dim ** -0.5 if set.
+        drop (float, optional): Dropout rate. Default: 0.0
+        attn_drop (float, optional): Attention dropout rate. Default: 0.0
+        drop_path (float | tuple[float], optional): Stochastic depth rate. Default: 0.0
+        norm_layer (nn.Module, optional): Normalization layer. Default: nn.LayerNorm
+        downsample (nn.Module | None, optional): Downsample layer at the end of the layer. Default: None
+        use_checkpoint (bool): Whether to use checkpointing to save memory. Default: False.
+    """
     
     def __init__(self, dim, input_resolution, depth, num_heads, window_size,
                  mlp_ratio=4., qkv_bias=True, qk_scale=None, drop=0., attn_drop=0.,
@@ -965,24 +1001,24 @@ if __name__ == '__main__':
         use_igam=True
     )
     
-    print(f"\n✓ Model created successfully!")
+    print(f"\nOK:) Model created successfully!")
     print(f"  - Number of parameters: {sum(p.numel() for p in model.parameters()):,}")
     
     # Test forward pass
     x = torch.randn(1, 3, 128, 128)
-    print(f"\n✓ Input shape: {x.shape}")
+    print(f"\nOK:) Input shape: {x.shape}")
     
     with torch.no_grad():
         y = model(x)
     
-    print(f"✓ Output shape: {y.shape}")
+    print(f"OK:) Output shape: {y.shape}")
     assert y.shape == x.shape, "Output shape mismatch!"
-    print(f"\n✓ Forward pass successful!")
+    print(f"\nOK:) Forward pass successful!")
     
     # Test illumination map extraction
     illum_map, dark_mask = model.get_illumination_map(x)
-    print(f"\n✓ Illumination map shape: {illum_map.shape}")
-    print(f"✓ Dark mask shape: {dark_mask.shape}")
+    print(f"\nOK:) Illumination map shape: {illum_map.shape}")
+    print(f"OK:) Dark mask shape: {dark_mask.shape}")
     
     print("\n" + "=" * 60)
     print("All tests passed! Swin-LLIE is ready for training.")
