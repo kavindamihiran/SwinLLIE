@@ -81,7 +81,7 @@ python models/network_swinllie.py
 ### Start Training from Scratch
 
 ```bash
-python train_swinllie.py --config configs/swinllie_lol.yaml
+python train.py --config configs/swinllie_lol.yaml
 ```
 
 ### Training Options
