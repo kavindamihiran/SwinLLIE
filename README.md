@@ -26,7 +26,7 @@ SwinLLIE/
 │       └── val_images/       # Validation outputs
 ├── losses.py                 # Hybrid loss functions
 ├── train_swinllie.py         # Training script
-├── test_swinllie.py          # Inference script
+├── inference.py          # Inference script
 └── requirements.txt          # Dependencies
 ```
 
@@ -161,7 +161,7 @@ This allows **seamless training continuation** without losing any training progr
 ### Enhance a Single Image
 
 ```bash
-python test_swinllie.py \
+python inference.py \
     --input your_image.jpg \
     --checkpoint experiments/swinllie_lol/checkpoints/best.pth \
     --output results/
@@ -170,7 +170,7 @@ python test_swinllie.py \
 ### Enhance a Folder of Images
 
 ```bash
-python test_swinllie.py \
+python inference.py \
     --input path/to/low_light_images/ \
     --checkpoint experiments/swinllie_lol/checkpoints/best.pth \
     --output results/enhanced/
@@ -179,7 +179,7 @@ python test_swinllie.py \
 ### Evaluate on Test Set (with metrics)
 
 ```bash
-python test_swinllie.py \
+python inference.py \
     --input datasets/LOL/eval15/low/ \
     --gt_folder datasets/LOL/eval15/high/ \
     --checkpoint experiments/swinllie_lol/checkpoints/best.pth \

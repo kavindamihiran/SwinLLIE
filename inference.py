@@ -30,10 +30,23 @@ def process_image(model, x, device):
     return output[:, :, :H, :W]
 
 def try_gpu_with_fallback(model, x, ckpt):
-    """Try GPU first, fall back to CPU if out of memory."""
+    """Try GPU first, fall back to CPU if out of memory or incompatible."""
     
-    if not torch.cuda.is_available():
-        print('  Using CPU (no CUDA available)')
+    # Check GPU compatibility (CUDA capability must be >= 7.0 for PyTorch 2.0+)
+    use_cuda = False
+    if torch.cuda.is_available():
+        try:
+            capability = torch.cuda.get_device_capability()
+            compute_capability = capability[0] + capability[1] / 10
+            if compute_capability >= 7.0:
+                use_cuda = True
+            else:
+                print(f'  GPU incompatible (compute capability {compute_capability:.1f} < 7.0), using CPU')
+        except:
+            print('  GPU detection failed, using CPU')
+    
+    if not use_cuda:
+        print('  Using CPU')
         model = model.to('cpu')
         model.load_state_dict(ckpt['model_state_dict'], strict=False)
         model.eval()
@@ -42,7 +55,7 @@ def try_gpu_with_fallback(model, x, ckpt):
     
     # Try GPU first
     try:
-        print('  Trying GPU...')
+        print('  Using compatible GPU...')
         model = model.to('cuda')
         model.load_state_dict(ckpt['model_state_dict'], strict=False)
         model.eval()
