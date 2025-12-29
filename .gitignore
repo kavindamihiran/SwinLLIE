@@ -15,6 +15,7 @@ test_results/
 
 # Datasets (usually too large for git)
 datasets/
+*.pth
 
 # IDE settings
 .vscode/

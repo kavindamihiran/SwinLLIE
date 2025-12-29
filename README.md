@@ -48,6 +48,7 @@ source venv/bin/activate  # Linux/Mac
 
 # Install dependencies
 pip install -r requirements.txt
+if use vpn:-  pip install -r requirements.txt --proxy http://127.0.0.1:2080
 ```
 
 ### Step 2: Download LOL Dataset
@@ -55,6 +56,7 @@ pip install -r requirements.txt
 Download from: https://daooshee.github.io/BMVC2018website/
 
 Extract to `datasets/LOL/` with this structure:
+
 ```
 datasets/LOL/
 ├── our485/        # Training set (485 pairs)
@@ -84,17 +86,18 @@ python train_swinllie.py --config configs/swinllie_lol.yaml
 
 ### Training Options
 
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `--config` | Path to config file | `configs/swinllie_lol.yaml` |
-| `--seed` | Random seed for reproducibility | `42` |
-| `--gpu` | GPU ID to use | `0` |
+| Argument   | Description                     | Default                     |
+| ---------- | ------------------------------- | --------------------------- |
+| `--config` | Path to config file             | `configs/swinllie_lol.yaml` |
+| `--seed`   | Random seed for reproducibility | `42`                        |
+| `--gpu`    | GPU ID to use                   | `0`                         |
 
 ### Monitor Training with TensorBoard
 
 ```bash
 tensorboard --logdir experiments/swinllie_lol/logs
 ```
+
 Then open http://localhost:6006 in your browser.
 
 ---
@@ -111,10 +114,11 @@ The training script **automatically resumes** from the last checkpoint if `resum
 ```yaml
 resume:
   enabled: true
-  checkpoint_path: "./experiments/swinllie_lol/checkpoints/epoch_XX.pth"  # Your checkpoint
+  checkpoint_path: "./experiments/swinllie_lol/checkpoints/epoch_XX.pth" # Your checkpoint
 ```
 
 3. Run training:
+
 ```bash
 python train_swinllie.py --config configs/swinllie_lol.yaml
 ```
@@ -122,6 +126,7 @@ python train_swinllie.py --config configs/swinllie_lol.yaml
 ### Option 2: Quick Resume (without editing config)
 
 Create a custom config YAML with your checkpoint path, or simply ensure your checkpoint is at:
+
 ```
 ./experiments/swinllie_lol/checkpoints/final.pth
 ```
@@ -130,15 +135,16 @@ Create a custom config YAML with your checkpoint path, or simply ensure your che
 
 After training, checkpoints are saved in `experiments/swinllie_lol/checkpoints/`:
 
-| File | Description |
-|------|-------------|
-| `best.pth` | Best model (highest validation PSNR) |
-| `final.pth` | Last epoch model |
+| File           | Description                                     |
+| -------------- | ----------------------------------------------- |
+| `best.pth`     | Best model (highest validation PSNR)            |
+| `final.pth`    | Last epoch model                                |
 | `epoch_XX.pth` | Periodic checkpoints (every `save_freq` epochs) |
 
 ### What's Saved in Checkpoints
 
 Each checkpoint contains:
+
 - Model weights (`model_state_dict`)
 - Optimizer state (`optimizer_state_dict`)
 - Learning rate scheduler state (`scheduler_state_dict`)
@@ -182,15 +188,15 @@ python test_swinllie.py \
 
 ### Inference Options
 
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `--input` | Input image or folder path | *required* |
-| `--output` | Output folder for enhanced images | `results/swinllie` |
-| `--checkpoint` | Path to model checkpoint | `experiments/.../best.pth` |
-| `--gt_folder` | Ground truth folder (for PSNR/SSIM) | `None` |
-| `--gpu` | GPU ID to use | `0` |
-| `--max_size` | Max image dimension (prevents OOM) | `512` |
-| `--save_comparison` | Save side-by-side comparison | `False` |
+| Argument            | Description                         | Default                    |
+| ------------------- | ----------------------------------- | -------------------------- |
+| `--input`           | Input image or folder path          | _required_                 |
+| `--output`          | Output folder for enhanced images   | `results/swinllie`         |
+| `--checkpoint`      | Path to model checkpoint            | `experiments/.../best.pth` |
+| `--gt_folder`       | Ground truth folder (for PSNR/SSIM) | `None`                     |
+| `--gpu`             | GPU ID to use                       | `0`                        |
+| `--max_size`        | Max image dimension (prevents OOM)  | `512`                      |
+| `--save_comparison` | Save side-by-side comparison        | `False`                    |
 
 ---
 
@@ -199,29 +205,32 @@ python test_swinllie.py \
 Key settings in `configs/swinllie_lol.yaml`:
 
 ### Model Settings
+
 ```yaml
 model:
-  embed_dim: 60       # Feature dimension (higher = more capacity)
-  depths: [4, 4, 4]   # Transformer blocks per stage
+  embed_dim: 60 # Feature dimension (higher = more capacity)
+  depths: [4, 4, 4] # Transformer blocks per stage
   num_heads: [6, 6, 6] # Attention heads per stage
-  window_size: 8      # Swin Transformer window size
-  use_igam: true      # Enable Illumination-Guided Attention
+  window_size: 8 # Swin Transformer window size
+  use_igam: true # Enable Illumination-Guided Attention
 ```
 
 ### Training Settings
+
 ```yaml
 training:
-  batch_size: 4       # Reduce if GPU OOM
-  epochs: 100         # Total training epochs
+  batch_size: 4 # Reduce if GPU OOM
+  epochs: 100 # Total training epochs
   learning_rate: 0.0002
-  use_amp: true       # Mixed precision (faster, less memory)
-  save_freq: 10       # Save checkpoint every N epochs
+  use_amp: true # Mixed precision (faster, less memory)
+  save_freq: 10 # Save checkpoint every N epochs
 ```
 
 ### Resume Settings
+
 ```yaml
 resume:
-  enabled: true       # Set to true to resume
+  enabled: true # Set to true to resume
   checkpoint_path: "./experiments/swinllie_lol/checkpoints/final.pth"
 ```
 
@@ -239,16 +248,19 @@ resume:
 ## 🔧 Troubleshooting
 
 ### GPU Out of Memory (OOM)
+
 - Reduce `batch_size` in config (try 2 or 1)
 - Use `--max_size 256` during inference
 - Ensure `use_amp: true` is enabled
 
 ### Resume Not Working
+
 - Verify the checkpoint file exists at the specified path
 - Check that `resume.enabled: true` in the config
 - Ensure `weights_only=False` is used in `torch.load()` (already implemented)
 
 ### Training Slow
+
 - Enable mixed precision: `use_amp: true`
 - Reduce `num_workers` if CPU bottleneck
 - Use smaller `patch_size` for training (96 → 64)
@@ -258,6 +270,7 @@ resume:
 ## 📝 Citation
 
 If you use this work, please cite:
+
 ```
 @article{swinllie2025,
   title={Swin-LLIE: Illumination-Aware Swin Transformer for Low-Light Image Enhancement},
