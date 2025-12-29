@@ -18,7 +18,21 @@ SAVE_DIR = './experiments/test_run'
 if __name__ == '__main__':
     os.makedirs(f'{SAVE_DIR}/checkpoints', exist_ok=True)
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # Check GPU compatibility (CUDA capability must be >= 7.0 for PyTorch 2.0+)
+    use_cuda = False
+    if torch.cuda.is_available():
+        try:
+            capability = torch.cuda.get_device_capability()
+            compute_capability = capability[0] + capability[1] / 10
+            if compute_capability >= 7.0:
+                use_cuda = True
+            else:
+                print(f'GPU detected but incompatible (compute capability {compute_capability:.1f} < 7.0)')
+                print('Falling back to CPU...')
+        except:
+            print('GPU detection failed, using CPU...')
+    
+    device = torch.device('cuda' if use_cuda else 'cpu')
     print(f'Device: {device}')
 
     # Model
