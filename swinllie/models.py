@@ -65,6 +65,11 @@ class IlluminationEstimationModule(nn.Module):
     - Dark regions → High values (more processing needed)
     - Bright regions → Low values (preserve as-is)
     
+    Improvements:
+    - Multi-scale feature extraction for better illumination estimation
+    - Smooth constraints to avoid noisy masks
+    - Better gradient flow with skip connections
+    
     Args:
         in_channels: Number of input channels (default: 3 for RGB)
         hidden_channels: Intermediate feature channels (default: 32)
@@ -73,27 +78,34 @@ class IlluminationEstimationModule(nn.Module):
     def __init__(self, in_channels=3, hidden_channels=32):
         super().__init__()
         
-        # Initial illumination estimation using max channel (Retinex-inspired)
-        # Max of RGB gives a rough illumination estimate
+        # Multi-scale feature extraction
+        self.conv1 = nn.Conv2d(in_channels, hidden_channels, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(hidden_channels, hidden_channels, kernel_size=3, padding=1)
         
-        # Refinement network: small UNet-like structure
-        self.refine = nn.Sequential(
-            # Encoder
-            nn.Conv2d(in_channels, hidden_channels, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(hidden_channels, hidden_channels, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
-            
-            # Bottleneck with dilation for larger receptive field
-            nn.Conv2d(hidden_channels, hidden_channels, kernel_size=3, padding=2, dilation=2),
-            nn.ReLU(inplace=True),
-            
-            # Decoder
-            nn.Conv2d(hidden_channels, hidden_channels, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(hidden_channels, 1, kernel_size=1),  # Output: 1 channel illumination map
-            nn.Sigmoid()  # Normalize to [0, 1]
-        )
+        # Dilated convolutions for larger receptive field without losing resolution
+        self.dilated1 = nn.Conv2d(hidden_channels, hidden_channels, kernel_size=3, padding=2, dilation=2)
+        self.dilated2 = nn.Conv2d(hidden_channels, hidden_channels, kernel_size=3, padding=4, dilation=4)
+        
+        # Fusion and output
+        self.fusion = nn.Conv2d(hidden_channels * 3, hidden_channels, kernel_size=1)
+        self.conv_out = nn.Conv2d(hidden_channels, 1, kernel_size=3, padding=1)
+        
+        # Smooth layer to reduce noise in illumination map
+        self.smooth = nn.Conv2d(1, 1, kernel_size=5, padding=2, bias=False)
+        nn.init.constant_(self.smooth.weight, 1.0 / 25.0)  # Average pooling effect
+        
+        self.relu = nn.ReLU(inplace=True)
+        self.sigmoid = nn.Sigmoid()
+        
+        self._init_weights()
+    
+    def _init_weights(self):
+        """Initialize weights for stable training."""
+        for m in [self.conv1, self.conv2, self.dilated1, self.dilated2, self.fusion, self.conv_out]:
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
     
     def forward(self, x):
         """
@@ -107,14 +119,34 @@ class IlluminationEstimationModule(nn.Module):
         # Get rough illumination using max channel (Retinex theory)
         rough_illum = torch.max(x, dim=1, keepdim=True)[0]  # (B, 1, H, W)
         
-        # Refine the illumination estimate
-        illum_map = self.refine(x)
+        # Multi-scale feature extraction
+        f1 = self.relu(self.conv1(x))
+        f2 = self.relu(self.conv2(f1))
         
-        # Blend rough and refined estimates
-        illum_map = 0.5 * rough_illum + 0.5 * illum_map
+        # Dilated branches for multi-scale context
+        d1 = self.relu(self.dilated1(f2))
+        d2 = self.relu(self.dilated2(f2))
+        
+        # Fuse multi-scale features
+        fused = torch.cat([f2, d1, d2], dim=1)
+        fused = self.relu(self.fusion(fused))
+        
+        # Output illumination map
+        illum_refined = self.sigmoid(self.conv_out(fused))
+        
+        # Blend rough and refined estimates (learned vs. prior)
+        illum_map = 0.4 * rough_illum + 0.6 * illum_refined
+        
+        # Apply smoothing to reduce noise
+        illum_map = self.smooth(illum_map)
+        illum_map = torch.clamp(illum_map, 0.0, 1.0)
         
         # Create dark mask: invert so dark areas have high values
+        # Apply soft thresholding to make the mask more discriminative
         dark_mask = 1.0 - illum_map
+        
+        # Enhance contrast of dark mask (make dark regions more pronounced)
+        dark_mask = torch.pow(dark_mask, 0.8)  # Gamma correction to enhance dark regions
         
         return illum_map, dark_mask
 
@@ -130,41 +162,84 @@ class IlluminationGuidedAttention(nn.Module):
     This is THE KEY NOVELTY of Swin-LLIE!
     
     Mathematical formulation:
-        F_out = F_in * (1 + α * M)
+        F_out = F_in * (1 + α * M) + β * M * F_enhanced
     
     Where:
         - F_in: Input features from Swin blocks
         - M: Dark mask (high values for dark regions)
-        - α: Learnable adaptive scaling factor
+        - α: Learnable adaptive channel scaling factor
+        - β: Learnable spatial enhancement factor
+        - F_enhanced: Additional enhancement branch for dark regions
     
     This allows the network to:
         - Apply stronger enhancement to dark regions (M is high)
         - Preserve bright regions as-is (M is low)
+        - Learn both channel-wise and spatial modulation
     
     Args:
         dim: Number of feature channels
+        reduction: Channel reduction ratio for attention (default: 4)
     """
     
-    def __init__(self, dim):
+    def __init__(self, dim, reduction=4):
         super().__init__()
         self.dim = dim
         
-        # Channel attention to compute adaptive scaling α
-        # Uses Global Average Pooling + FC layers
-        self.channel_attention = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),  # Global Average Pooling
-            nn.Flatten(),
-            nn.Linear(dim, dim // 4),
+        # Channel attention with both max and avg pooling for richer statistics
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.max_pool = nn.AdaptiveMaxPool2d(1)
+        
+        # Shared MLP for channel attention
+        self.channel_mlp = nn.Sequential(
+            nn.Linear(dim, dim // reduction, bias=False),
             nn.ReLU(inplace=True),
-            nn.Linear(dim // 4, dim),
-            nn.Sigmoid()  # α ∈ [0, 1]
+            nn.Linear(dim // reduction, dim, bias=False)
         )
         
-        # Learnable base scaling parameter (initialized to 0.3 - reduced to prevent over-enhancement)
-        self.base_alpha = nn.Parameter(torch.ones(1) * 0.3)
+        # Spatial attention branch - process dark mask with feature guidance
+        self.spatial_conv = nn.Sequential(
+            nn.Conv2d(dim + 1, dim // reduction, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(dim // reduction),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(dim // reduction, 1, kernel_size=3, padding=1, bias=False),
+        )
         
-        # Optional: spatial attention refinement
-        self.spatial_refine = nn.Conv2d(1, 1, kernel_size=3, padding=1)
+        # Dark region enhancement branch
+        self.dark_enhance = nn.Sequential(
+            nn.Conv2d(dim, dim, kernel_size=3, padding=1, groups=dim, bias=False),  # Depthwise
+            nn.BatchNorm2d(dim),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(dim, dim, kernel_size=1, bias=False),  # Pointwise
+            nn.BatchNorm2d(dim),
+        )
+        
+        # Learnable scaling parameters with proper initialization
+        self.alpha_scale = nn.Parameter(torch.ones(1) * 0.1)  # Start small for stability
+        self.beta_scale = nn.Parameter(torch.ones(1) * 0.1)
+        
+        # Layer normalization for output stability
+        # Use adaptive num_groups to handle various channel dimensions
+        num_groups = min(8, dim)
+        while dim % num_groups != 0 and num_groups > 1:
+            num_groups -= 1
+        self.norm = nn.GroupNorm(num_groups=num_groups, num_channels=dim)
+        
+        self._init_weights()
+    
+    def _init_weights(self):
+        """Initialize weights for stable training."""
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+            elif isinstance(m, nn.Linear):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+                nn.init.ones_(m.weight)
+                nn.init.zeros_(m.bias)
     
     def forward(self, features, dark_mask):
         """
@@ -177,27 +252,43 @@ class IlluminationGuidedAttention(nn.Module):
         """
         B, C, H, W = features.shape
         
-        # 1. Compute adaptive channel scaling α
-        alpha = self.channel_attention(features)  # (B, C)
-        alpha = alpha.view(B, C, 1, 1)  # Reshape for broadcasting
-        
-        # 2. Resize dark_mask to match feature resolution
+        # 1. Resize dark_mask to match feature resolution (use area for downsampling)
         if dark_mask.shape[2:] != features.shape[2:]:
-            dark_mask = F.interpolate(dark_mask, size=(H, W), mode='bilinear', align_corners=False)
+            if dark_mask.shape[2] > H:  # Downsampling
+                dark_mask_resized = F.interpolate(dark_mask, size=(H, W), mode='area')
+            else:  # Upsampling
+                dark_mask_resized = F.interpolate(dark_mask, size=(H, W), mode='bilinear', align_corners=False)
+        else:
+            dark_mask_resized = dark_mask
         
-        # 3. Refine spatial attention with SUPPRESSION for bright regions
-        refined_mask = torch.sigmoid(self.spatial_refine(dark_mask))
+        # 2. Channel attention with combined pooling (SE-Net style but improved)
+        avg_out = self.channel_mlp(self.avg_pool(features).view(B, C))
+        max_out = self.channel_mlp(self.max_pool(features).view(B, C))
+        channel_att = torch.sigmoid(avg_out + max_out).view(B, C, 1, 1)
         
-        # 4. FIXED: Suppress bright regions - only enhance dark areas
-        # Clamp refined_mask to ensure bright regions (low dark_mask) get minimal enhancement
-        suppression = torch.clamp(refined_mask - 0.3, min=0.0)  # Threshold at 0.3
+        # 3. Spatial attention guided by both features and dark mask
+        spatial_input = torch.cat([features, dark_mask_resized], dim=1)
+        spatial_att = torch.sigmoid(self.spatial_conv(spatial_input))
         
-        # 5. Apply illumination-guided modulation (only to dark regions)
-        # F_out = F_in * (1 + base_α * α * suppressed_mask)
-        modulation = 1.0 + self.base_alpha * alpha * suppression
-        modulated_features = features * modulation
+        # 4. Combined attention mask - focus more on dark regions
+        # Multiply spatial attention with dark mask to ensure we only enhance dark areas
+        attention_mask = spatial_att * dark_mask_resized
         
-        return modulated_features
+        # 5. Dark region enhancement branch
+        enhanced_features = self.dark_enhance(features)
+        
+        # 6. Apply illumination-guided modulation with residual design
+        # F_out = F_in * (1 + α * channel_att * attention_mask) + β * attention_mask * F_enhanced
+        modulation = 1.0 + self.alpha_scale * channel_att * attention_mask
+        modulated_features = features * modulation + self.beta_scale * attention_mask * enhanced_features
+        
+        # 7. Normalize for training stability
+        modulated_features = self.norm(modulated_features)
+        
+        # 8. Residual connection for gradient flow
+        output = modulated_features + features
+        
+        return output
 
 
 # =============================================================================
