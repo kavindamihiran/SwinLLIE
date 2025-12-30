@@ -398,39 +398,141 @@ class SSIMLoss(nn.Module):
         return 1.0 - ssim.mean()
 
 
+class ExposureControlLoss(nn.Module):
+    """
+    Exposure Control Loss for preventing overexposure in bright regions.
+    
+    CRITICAL for handling mixed illumination scenes (dark with bright spots)!
+    
+    This loss prevents the model from over-enhancing already bright regions
+    which can lead to blown-out highlights and loss of detail.
+    
+    Components:
+    1. Overexposure penalty: Penalizes pixels that exceed a threshold
+    2. Bright region preservation: Ensures features are preserved in bright areas
+    3. Dynamic range constraint: Maintains proper contrast distribution
+    
+    Mathematical formulation:
+        L_exposure = λ1 * L_overexposure + λ2 * L_bright_preserve
+    
+    Where:
+        L_overexposure = mean(ReLU(pred - threshold)^2)
+        L_bright_preserve = mean(|pred[bright] - target[bright]|) for bright pixels
+    
+    Args:
+        bright_threshold: Pixel value above which regions are considered bright (default: 0.8)
+        overexposure_weight: Weight for overexposure penalty (default: 2.0)
+        preservation_weight: Weight for bright region preservation (default: 1.5)
+    """
+    
+    def __init__(self, bright_threshold=0.8, overexposure_weight=2.0, preservation_weight=1.5):
+        super().__init__()
+        self.bright_threshold = bright_threshold
+        self.overexposure_weight = overexposure_weight
+        self.preservation_weight = preservation_weight
+        self.overexposure_threshold = 0.95  # Hard limit for overexposure
+    
+    def forward(self, pred, target, bright_mask=None):
+        """
+        Args:
+            pred: Predicted enhanced image (B, 3, H, W) in range [0, 1]
+            target: Target normal-light image (B, 3, H, W) in range [0, 1]
+            bright_mask: Optional bright region mask (B, 1, H, W) where 1=very bright
+        
+        Returns:
+            Exposure control loss (scalar)
+        """
+        loss = 0.0
+        
+        # Component 1: Overexposure penalty
+        # Penalize pixels that exceed the overexposure threshold
+        overexposed = F.relu(pred - self.overexposure_threshold)
+        overexposure_loss = (overexposed ** 2).mean()
+        loss += self.overexposure_weight * overexposure_loss
+        
+        # Component 2: Bright region preservation
+        # If bright_mask is provided, use it; otherwise, detect bright regions from target
+        if bright_mask is None:
+            # Detect bright regions from target image
+            target_brightness = torch.max(target, dim=1, keepdim=True)[0]
+            bright_mask = (target_brightness > self.bright_threshold).float()
+        else:
+            # Ensure bright_mask has same spatial size as pred
+            if bright_mask.shape[2:] != pred.shape[2:]:
+                bright_mask = F.interpolate(bright_mask, size=pred.shape[2:], 
+                                           mode='bilinear', align_corners=False)
+        
+        # Expand mask to all channels
+        bright_mask_expanded = bright_mask.expand_as(pred)
+        
+        # Compute preservation loss only in bright regions
+        if bright_mask.sum() > 0:
+            # L1 loss weighted by bright mask
+            bright_preservation = torch.abs(pred - target) * bright_mask_expanded
+            preservation_loss = bright_preservation.sum() / (bright_mask_expanded.sum() + 1e-8)
+            loss += self.preservation_weight * preservation_loss
+        
+        # Component 3: Highlight detail preservation using gradient matching
+        # Ensure bright regions maintain their texture/detail
+        if bright_mask.sum() > 0:
+            # Compute local gradients
+            pred_grad_x = torch.abs(pred[:, :, :, 1:] - pred[:, :, :, :-1])
+            pred_grad_y = torch.abs(pred[:, :, 1:, :] - pred[:, :, :-1, :])
+            target_grad_x = torch.abs(target[:, :, :, 1:] - target[:, :, :, :-1])
+            target_grad_y = torch.abs(target[:, :, 1:, :] - target[:, :, :-1, :])
+            
+            # Match gradients in bright regions
+            bright_mask_x = bright_mask_expanded[:, :, :, 1:]
+            bright_mask_y = bright_mask_expanded[:, :, 1:, :]
+            
+            if bright_mask_x.sum() > 0:
+                grad_loss_x = torch.abs(pred_grad_x - target_grad_x) * bright_mask_x
+                grad_loss_x = grad_loss_x.sum() / (bright_mask_x.sum() + 1e-8)
+                loss += 0.5 * grad_loss_x
+            
+            if bright_mask_y.sum() > 0:
+                grad_loss_y = torch.abs(pred_grad_y - target_grad_y) * bright_mask_y
+                grad_loss_y = grad_loss_y.sum() / (bright_mask_y.sum() + 1e-8)
+                loss += 0.5 * grad_loss_y
+        
+        return loss
+
+
 class HybridLoss(nn.Module):
     """
     Hybrid Loss for Swin-LLIE Training.
     
     Combines multiple loss functions for optimal low-light enhancement:
     
-    L_total = λ1 * L_L1 + λ2 * L_VGG + λ3 * L_Color + λ4 * L_Smooth + λ5 * L_Edge + λ6 * L_HF
+    L_total = λ1 * L_L1 + λ2 * L_VGG + λ3 * L_Color + λ4 * L_Smooth + λ5 * L_Edge + λ6 * L_HF + λ7 * L_Exposure
     
     Default weights (empirically determined):
         - λ1 = 1.0   (L1: main reconstruction)
         - λ2 = 0.1   (VGG: perceptual quality)
         - λ3 = 0.5   (Color: color preservation)
         - λ4 = 0.01  (Smooth: illumination regularization)
-        - λ5 = 1.0   (Edge: edge/sharpness preservation) - NEW!
-        - λ6 = 0.5   (HF: high-frequency detail preservation) - NEW!
+        - λ5 = 1.0   (Edge: edge/sharpness preservation)
+        - λ6 = 0.5   (HF: high-frequency detail preservation)
+        - λ7 = 1.0   (Exposure: prevent overexposure in bright regions) - NEW!
     
     Usage:
         loss_fn = HybridLoss()
-        loss = loss_fn(pred_image, target_image, illumination_map)
+        loss = loss_fn(pred_image, target_image, illumination_map, bright_mask)
     
     Args:
         lambda_l1: Weight for L1 loss
         lambda_vgg: Weight for VGG perceptual loss
         lambda_color: Weight for color consistency loss
         lambda_smooth: Weight for illumination smoothness loss
-        lambda_edge: Weight for edge sharpness loss (NEW)
-        lambda_hf: Weight for high-frequency loss (NEW)
+        lambda_edge: Weight for edge sharpness loss
+        lambda_hf: Weight for high-frequency loss
+        lambda_exposure: Weight for exposure control loss (NEW)
         use_ssim: Whether to include SSIM loss (optional)
         lambda_ssim: Weight for SSIM loss
     """
     
     def __init__(self, lambda_l1=1.0, lambda_vgg=0.1, lambda_color=0.5, 
-                 lambda_smooth=0.01, lambda_edge=1.0, lambda_hf=0.5,
+                 lambda_smooth=0.01, lambda_edge=1.0, lambda_hf=0.5, lambda_exposure=1.0,
                  use_ssim=False, lambda_ssim=0.1):
         super().__init__()
         
@@ -441,6 +543,7 @@ class HybridLoss(nn.Module):
         self.lambda_smooth = lambda_smooth
         self.lambda_edge = lambda_edge
         self.lambda_hf = lambda_hf
+        self.lambda_exposure = lambda_exposure
         self.use_ssim = use_ssim
         self.lambda_ssim = lambda_ssim
         
@@ -449,13 +552,14 @@ class HybridLoss(nn.Module):
         self.vgg_loss = VGGPerceptualLoss()
         self.color_loss = ColorConsistencyLoss()
         self.smooth_loss = IlluminationSmoothnessLoss()
-        self.edge_loss = EdgeSharpnessLoss()  # NEW for sharpness
-        self.hf_loss = HighFrequencyLoss()    # NEW for detail preservation
+        self.edge_loss = EdgeSharpnessLoss()
+        self.hf_loss = HighFrequencyLoss()
+        self.exposure_loss = ExposureControlLoss()  # NEW for preventing overexposure
         
         if use_ssim:
             self.ssim_loss = SSIMLoss()
     
-    def forward(self, pred, target, illum_map=None):
+    def forward(self, pred, target, illum_map=None, bright_mask=None):
         """
         Compute hybrid loss.
         
@@ -463,6 +567,7 @@ class HybridLoss(nn.Module):
             pred: Predicted enhanced image (B, 3, H, W) in [0, 1]
             target: Ground truth normal-light image (B, 3, H, W) in [0, 1]
             illum_map: Optional illumination map for smoothness regularization
+            bright_mask: Optional bright region mask for exposure control (NEW)
         
         Returns:
             total_loss: Combined loss value
@@ -494,17 +599,23 @@ class HybridLoss(nn.Module):
             loss_dict['smooth'] = smooth.item()
             total_loss += self.lambda_smooth * smooth
         
-        # Edge Sharpness Loss (NEW - critical for sharp images)
+        # Edge Sharpness Loss (critical for sharp images)
         if self.lambda_edge > 0:
             edge = self.edge_loss(pred, target)
             loss_dict['edge'] = edge.item()
             total_loss += self.lambda_edge * edge
         
-        # High-Frequency Detail Loss (NEW - preserves textures)
+        # High-Frequency Detail Loss (preserves textures)
         if self.lambda_hf > 0:
             hf = self.hf_loss(pred, target)
             loss_dict['hf'] = hf.item()
             total_loss += self.lambda_hf * hf
+        
+        # Exposure Control Loss (NEW - prevents overexposure in bright regions)
+        if self.lambda_exposure > 0:
+            exposure = self.exposure_loss(pred, target, bright_mask)
+            loss_dict['exposure'] = exposure.item()
+            total_loss += self.lambda_exposure * exposure
         
         # Optional SSIM Loss
         if self.use_ssim:
@@ -530,6 +641,7 @@ if __name__ == '__main__':
     pred = torch.rand(2, 3, 128, 128)
     target = torch.rand(2, 3, 128, 128)
     illum_map = torch.rand(2, 1, 128, 128)
+    bright_mask = torch.rand(2, 1, 128, 128)
     
     # Test individual losses
     print("\n1. Testing L1 Loss...")
@@ -560,9 +672,13 @@ if __name__ == '__main__':
     ssim_loss = SSIMLoss()
     print(f"   SSIM Loss: {ssim_loss(pred, target):.4f}")
     
-    print("\n8. Testing Hybrid Loss (with new sharpness losses)...")
+    print("\n8. Testing Exposure Control Loss (NEW)...")
+    exposure_loss = ExposureControlLoss()
+    print(f"   Exposure Loss: {exposure_loss(pred, target, bright_mask):.4f}")
+    
+    print("\n9. Testing Hybrid Loss (with new exposure control)...")
     hybrid_loss = HybridLoss(use_ssim=True)
-    total, loss_dict = hybrid_loss(pred, target, illum_map)
+    total, loss_dict = hybrid_loss(pred, target, illum_map, bright_mask)
     print(f"   Total Loss: {total:.4f}")
     print(f"   Loss breakdown: {loss_dict}")
     

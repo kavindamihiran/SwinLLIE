@@ -116,6 +116,7 @@ if __name__ == '__main__':
         lambda_smooth=loss_cfg.get('lambda_smooth', 0.01),
         lambda_edge=loss_cfg.get('lambda_edge', 1.0),
         lambda_hf=loss_cfg.get('lambda_hf', 0.5),
+        lambda_exposure=loss_cfg.get('lambda_exposure', 1.0),
         use_ssim=loss_cfg.get('use_ssim', False),
         lambda_ssim=loss_cfg.get('lambda_ssim', 0.1)
     ).to(device)
@@ -171,8 +172,8 @@ if __name__ == '__main__':
             if USE_AMP and scaler is not None:
                 with autocast():
                     output = model(low)
-                    illum, _ = model.get_illumination_map(low)
-                    loss, _ = criterion(output, high, illum)
+                    illum, dark_mask, bright_mask = model.get_illumination_map(low)
+                    loss, _ = criterion(output, high, illum, bright_mask)
                 
                 scaler.scale(loss).backward()
                 scaler.unscale_(optimizer)
@@ -181,8 +182,8 @@ if __name__ == '__main__':
                 scaler.update()
             else:
                 output = model(low)
-                illum, _ = model.get_illumination_map(low)
-                loss, _ = criterion(output, high, illum)
+                illum, dark_mask, bright_mask = model.get_illumination_map(low)
+                loss, _ = criterion(output, high, illum, bright_mask)
                 
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)

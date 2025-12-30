@@ -73,6 +73,7 @@ loss:
   lambda_smooth: 0.01
   lambda_edge: 1.0
   lambda_hf: 0.5
+  lambda_exposure: 1.0  # NEW: Prevents overexposure in bright regions
   use_ssim: false
   lambda_ssim: 0.1
 

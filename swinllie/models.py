@@ -115,6 +115,7 @@ class IlluminationEstimationModule(nn.Module):
         Returns:
             illum_map: Illumination map (B, 1, H, W) where 0=dark, 1=bright
             dark_mask: Inverted map (B, 1, H, W) where 1=dark, 0=bright
+            bright_mask: Mask for already bright regions (B, 1, H, W) where 1=very bright, 0=normal/dark
         """
         # Get rough illumination using max channel (Retinex theory)
         rough_illum = torch.max(x, dim=1, keepdim=True)[0]  # (B, 1, H, W)
@@ -148,7 +149,14 @@ class IlluminationEstimationModule(nn.Module):
         # Use stronger gamma for more aggressive dark region targeting
         dark_mask = torch.pow(dark_mask, 0.6)  # Stronger gamma for sharper enhancement
         
-        return illum_map, dark_mask
+        # CRITICAL FIX: Detect bright regions that should be PROTECTED from overexposure
+        # Bright regions are those with illumination > threshold (e.g., 0.7)
+        # These regions should NOT be enhanced further
+        bright_threshold = 0.6  # Adjust based on your dataset
+        bright_mask = torch.clamp((illum_map - bright_threshold) / (1.0 - bright_threshold), 0.0, 1.0)
+        bright_mask = torch.pow(bright_mask, 0.8)  # Smooth transition for bright regions
+        
+        return illum_map, dark_mask, bright_mask
 
 
 # =============================================================================
@@ -246,11 +254,12 @@ class IlluminationGuidedAttention(nn.Module):
                 nn.init.ones_(m.weight)
                 nn.init.zeros_(m.bias)
     
-    def forward(self, features, dark_mask):
+    def forward(self, features, dark_mask, bright_mask=None):
         """
         Args:
             features: (B, C, H, W) Feature tensor from Swin blocks
             dark_mask: (B, 1, H, W) Dark mask where dark=1, bright=0
+            bright_mask: (B, 1, H, W) Bright mask where 1=very bright (protect from overexposure)
         
         Returns:
             modulated_features: (B, C, H, W) Illumination-modulated features
@@ -266,38 +275,60 @@ class IlluminationGuidedAttention(nn.Module):
         else:
             dark_mask_resized = dark_mask
         
-        # 2. Channel attention with combined pooling (SE-Net style but improved)
+        # 2. Resize bright_mask to match feature resolution
+        if bright_mask is not None:
+            if bright_mask.shape[2:] != features.shape[2:]:
+                if bright_mask.shape[2] > H:  # Downsampling
+                    bright_mask_resized = F.interpolate(bright_mask, size=(H, W), mode='area')
+                else:  # Upsampling
+                    bright_mask_resized = F.interpolate(bright_mask, size=(H, W), mode='bilinear', align_corners=False)
+            else:
+                bright_mask_resized = bright_mask
+        else:
+            # If no bright mask provided, create one from dark_mask
+            bright_mask_resized = torch.clamp(1.0 - dark_mask_resized - 0.3, 0.0, 1.0)
+        
+        # 3. Channel attention with combined pooling (SE-Net style but improved)
         avg_out = self.channel_mlp(self.avg_pool(features).view(B, C))
         max_out = self.channel_mlp(self.max_pool(features).view(B, C))
         channel_att = torch.sigmoid(avg_out + max_out).view(B, C, 1, 1)
         
-        # 3. Spatial attention guided by both features and dark mask
+        # 4. Spatial attention guided by both features and dark mask
         spatial_input = torch.cat([features, dark_mask_resized], dim=1)
         spatial_att = torch.sigmoid(self.spatial_conv(spatial_input))
         
-        # 4. Combined attention mask - focus more on dark regions
-        # Use softer blending to allow more general enhancement
+        # 5. Combined attention mask - focus more on dark regions
+        # CRITICAL: Suppress attention in bright regions to prevent overexposure
         attention_mask = spatial_att * (0.5 + 0.5 * dark_mask_resized)
         
-        # 5. Dark region enhancement branch
+        # CRITICAL FIX: Apply bright region suppression
+        # Where bright_mask is high, we REDUCE enhancement significantly
+        suppression_factor = 1.0 - 0.9 * bright_mask_resized  # Reduce by up to 90% in bright areas
+        attention_mask = attention_mask * suppression_factor
+        
+        # 6. Dark region enhancement branch
         enhanced_features = self.dark_enhance(features)
         
-        # 6. Edge enhancement for sharpness
+        # 7. Edge enhancement for sharpness
         edge_features = self.edge_enhance(features)
         
-        # 7. Apply illumination-guided modulation with stronger effect
+        # 8. Apply illumination-guided modulation with stronger effect in dark, weaker in bright
         # F_out = F_in * (1 + α * channel_att * attention_mask) + β * attention_mask * F_enhanced + γ * edge
         modulation = 1.0 + self.alpha_scale * channel_att * attention_mask
         modulated_features = features * modulation + self.beta_scale * attention_mask * enhanced_features
         
-        # 8. Add edge enhancement for sharper results
-        modulated_features = modulated_features + self.edge_scale * edge_features
+        # 9. Add edge enhancement for sharper results, but reduce in bright regions
+        edge_contribution = self.edge_scale * edge_features * suppression_factor
+        modulated_features = modulated_features + edge_contribution
         
-        # 9. Light normalization that preserves details
+        # 10. Light normalization that preserves details
         modulated_features = self.norm(modulated_features)
         
-        # 10. Scaled residual connection to allow more modification
-        output = 0.8 * modulated_features + 0.2 * features
+        # 11. Adaptive residual connection based on brightness
+        # In bright regions, use MORE of the original features (less modification)
+        # In dark regions, use MORE of the modulated features (more enhancement)
+        residual_weight = 0.2 + 0.6 * bright_mask_resized  # 0.2 for dark, up to 0.8 for bright
+        output = (1.0 - residual_weight) * modulated_features + residual_weight * features
         
         return output
 
@@ -695,12 +726,13 @@ class RSTB_IGAM(nn.Module):
         if use_igam:
             self.igam = IlluminationGuidedAttention(dim)
 
-    def forward(self, x, x_size, dark_mask=None):
+    def forward(self, x, x_size, dark_mask=None, bright_mask=None):
         """
         Args:
             x: (B, H*W, C) Input features
             x_size: (H, W) Spatial size
             dark_mask: (B, 1, H, W) Dark region mask (optional)
+            bright_mask: (B, 1, H, W) Bright region mask (optional)
         
         Returns:
             Enhanced features with residual connection
@@ -710,9 +742,9 @@ class RSTB_IGAM(nn.Module):
         residual = self.patch_unembed(residual, x_size)
         residual = self.conv(residual)
         
-        # NOVEL: Apply illumination-guided attention
+        # NOVEL: Apply illumination-guided attention with bright region protection
         if self.use_igam and dark_mask is not None:
-            residual = self.igam(residual, dark_mask)
+            residual = self.igam(residual, dark_mask, bright_mask)
         
         residual = self.patch_embed(residual)
         
@@ -995,7 +1027,7 @@ class SwinLLIE(nn.Module):
         # ========================
         # Step 1: Estimate illumination
         # ========================
-        illum_map, dark_mask = self.illumination_estimator((x / self.img_range) + self.mean)
+        illum_map, dark_mask, bright_mask = self.illumination_estimator((x / self.img_range) + self.mean)
         
         # ========================
         # Step 2: Shallow feature extraction
@@ -1017,8 +1049,8 @@ class SwinLLIE(nn.Module):
             x_flat = self.patch_embed.forward(x_enc) if i_stage == 0 else x_enc.flatten(2).transpose(1, 2)
             x_flat = self.pos_drop(x_flat)
             
-            # Process through RSTB_IGAM
-            x_flat = self.encoder_layers[i_stage](x_flat, x_size, dark_mask)
+            # Process through RSTB_IGAM with bright mask protection
+            x_flat = self.encoder_layers[i_stage](x_flat, x_size, dark_mask, bright_mask)
             
             # Reshape back to 2D
             x_enc = x_flat.transpose(1, 2).view(-1, x_flat.shape[-1], curr_h, curr_w)
@@ -1049,8 +1081,8 @@ class SwinLLIE(nn.Module):
             # Flatten for transformer
             x_flat = x_dec.flatten(2).transpose(1, 2)
             
-            # Process through decoder RSTB_IGAM
-            x_flat = self.decoder_layers[i_dec](x_flat, x_size, dark_mask)
+            # Process through decoder RSTB_IGAM with bright mask protection
+            x_flat = self.decoder_layers[i_dec](x_flat, x_size, dark_mask, bright_mask)
             
             # Reshape back to 2D
             x_dec = x_flat.transpose(1, 2).view(-1, x_flat.shape[-1], curr_h, curr_w)
@@ -1080,6 +1112,7 @@ class SwinLLIE(nn.Module):
         Returns:
             illum_map: Illumination map (B, 1, H, W)
             dark_mask: Dark region mask (B, 1, H, W)
+            bright_mask: Bright region mask (B, 1, H, W)
         """
         return self.illumination_estimator(x)
 
@@ -1119,9 +1152,10 @@ if __name__ == '__main__':
     print(f"\nOK:) Forward pass successful!")
     
     # Test illumination map extraction
-    illum_map, dark_mask = model.get_illumination_map(x)
+    illum_map, dark_mask, bright_mask = model.get_illumination_map(x)
     print(f"\nOK:) Illumination map shape: {illum_map.shape}")
     print(f"OK:) Dark mask shape: {dark_mask.shape}")
+    print(f"OK:) Bright mask shape: {bright_mask.shape}")
     
     print("\n" + "=" * 60)
     print("All tests passed! Swin-LLIE is ready for training.")
