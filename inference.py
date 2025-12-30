@@ -86,8 +86,8 @@ if __name__ == '__main__':
     print('Swin-LLIE Inference')
     print('=' * 40)
     
-    # Load checkpoint
-    ckpt = torch.load(CHECKPOINT, map_location='cpu')
+    # Load checkpoint (weights_only=False for compatibility with PyTorch 2.6+)
+    ckpt = torch.load(CHECKPOINT, map_location='cpu', weights_only=False)
     
     # Process images
     for fname in os.listdir(INPUT_DIR):

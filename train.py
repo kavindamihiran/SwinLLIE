@@ -2,21 +2,29 @@
 """Training script for Swin-LLIE"""
 
 import os
+import argparse
 import numpy as np
+import yaml
 import torch
 from torch.cuda.amp import GradScaler, autocast
 from tqdm import tqdm
 from swinllie import SwinLLIE, HybridLoss, get_dataloader
 from swinllie.utils import calculate_psnr, calculate_ssim
 
-# Config
-EPOCHS = 100
-BATCH_SIZE = 4
-PATCH_SIZE = 96
-LR = 2e-4
-DATASET = './datasets/LOL'
-SAVE_DIR = './experiments/test_run'
-EVAL_INTERVAL = 10  # Evaluate every N epochs
+
+def load_config(config_path):
+    """Load configuration from YAML file."""
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    return config
+
+
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(description='Train Swin-LLIE model')
+    parser.add_argument('--config', type=str, default='./configs/swinllie_lol.yaml',
+                        help='Path to config file')
+    return parser.parse_args()
 
 
 def evaluate_single(model, device, dataset_path):
@@ -36,6 +44,31 @@ def evaluate_single(model, device, dataset_path):
         return calculate_psnr(out_np, gt_np), calculate_ssim(out_np, gt_np)
 
 if __name__ == '__main__':
+    # Parse arguments and load config
+    args = parse_args()
+    config = load_config(args.config)
+    
+    # Extract config values
+    model_cfg = config['model']
+    dataset_cfg = config['dataset']
+    train_cfg = config['training']
+    loss_cfg = config['loss']
+    val_cfg = config['validation']
+    resume_cfg = config.get('resume', {'enabled': False})
+    
+    # Training parameters from config
+    EPOCHS = train_cfg['epochs']
+    BATCH_SIZE = train_cfg['batch_size']
+    PATCH_SIZE = dataset_cfg['patch_size']
+    LR = train_cfg['learning_rate']
+    DATASET = dataset_cfg['root_dir']
+    SAVE_DIR = train_cfg['save_dir']
+    EVAL_INTERVAL = val_cfg['val_freq']
+    WARMUP_EPOCHS = train_cfg.get('warmup_epochs', 5)
+    MIN_LR = train_cfg.get('min_lr', 1e-6)
+    GRAD_CLIP = train_cfg.get('grad_clip', 1.0)
+    USE_AMP = train_cfg.get('use_amp', True)
+    
     os.makedirs(f'{SAVE_DIR}/checkpoints', exist_ok=True)
 
     # Check GPU compatibility (CUDA capability must be >= 7.0 for PyTorch 2.0+)
@@ -54,19 +87,69 @@ if __name__ == '__main__':
     
     device = torch.device('cuda' if use_cuda else 'cpu')
     print(f'Device: {device}')
+    print(f'Config: {args.config}')
 
-    # Model
-    model = SwinLLIE(img_size=128, embed_dim=60, depths=[4,4,4], num_heads=[6,6,6], window_size=8).to(device)
-    criterion = HybridLoss().to(device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=1e-4)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS, eta_min=1e-6)
-    scaler = GradScaler()
+    # Model - use parameters from config
+    model = SwinLLIE(
+        img_size=model_cfg['img_size'],
+        patch_size=model_cfg.get('patch_size', 1),
+        in_chans=model_cfg.get('in_chans', 3),
+        embed_dim=model_cfg['embed_dim'],
+        depths=model_cfg['depths'],
+        num_heads=model_cfg['num_heads'],
+        window_size=model_cfg['window_size'],
+        mlp_ratio=model_cfg.get('mlp_ratio', 2.0),
+        qkv_bias=model_cfg.get('qkv_bias', True),
+        drop_rate=model_cfg.get('drop_rate', 0.0),
+        attn_drop_rate=model_cfg.get('attn_drop_rate', 0.0),
+        drop_path_rate=model_cfg.get('drop_path_rate', 0.1),
+        use_checkpoint=model_cfg.get('use_checkpoint', False),
+        resi_connection=model_cfg.get('resi_connection', '1conv'),
+        use_igam=model_cfg.get('use_igam', True)
+    ).to(device)
+    
+    # Loss with config parameters
+    criterion = HybridLoss(
+        lambda_l1=loss_cfg.get('lambda_l1', 1.0),
+        lambda_vgg=loss_cfg.get('lambda_vgg', 0.1),
+        lambda_color=loss_cfg.get('lambda_color', 0.5),
+        lambda_smooth=loss_cfg.get('lambda_smooth', 0.01),
+        lambda_edge=loss_cfg.get('lambda_edge', 1.0),
+        lambda_hf=loss_cfg.get('lambda_hf', 0.5),
+        use_ssim=loss_cfg.get('use_ssim', False),
+        lambda_ssim=loss_cfg.get('lambda_ssim', 0.1)
+    ).to(device)
+    
+    # Optimizer with config parameters
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=LR,
+        weight_decay=train_cfg.get('weight_decay', 1e-4),
+        betas=tuple(train_cfg.get('betas', [0.9, 0.999]))
+    )
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS, eta_min=MIN_LR)
+    scaler = GradScaler() if USE_AMP else None
 
     print(f'Model params: {sum(p.numel() for p in model.parameters()):,}')
 
-    # Data
-    train_loader = get_dataloader('lol', DATASET, 'train', BATCH_SIZE, PATCH_SIZE, num_workers=2)
+    # Data - use config parameters
+    train_loader = get_dataloader(
+        dataset_cfg['name'], 
+        DATASET, 
+        'train', 
+        BATCH_SIZE, 
+        PATCH_SIZE, 
+        num_workers=dataset_cfg.get('num_workers', 4)
+    )
     print(f'Training samples: {len(train_loader.dataset)}')
+
+    # Resume training if enabled
+    start_epoch = 0
+    if resume_cfg.get('enabled', False) and os.path.exists(resume_cfg.get('checkpoint_path', '')):
+        checkpoint = torch.load(resume_cfg['checkpoint_path'], map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        start_epoch = checkpoint.get('epoch', 0) + 1
+        print(f'Resumed from epoch {start_epoch}')
 
     # Train
     best_psnr = 0
@@ -75,7 +158,7 @@ if __name__ == '__main__':
     interval_best_loss = float('inf')
     interval_best_state = None
     
-    for epoch in range(EPOCHS):
+    for epoch in range(start_epoch, EPOCHS):
         model.train()
         total_loss = 0
         
@@ -84,16 +167,26 @@ if __name__ == '__main__':
             low, high = batch['low'].to(device), batch['high'].to(device)
             
             optimizer.zero_grad()
-            with autocast():
+            
+            if USE_AMP and scaler is not None:
+                with autocast():
+                    output = model(low)
+                    illum, _ = model.get_illumination_map(low)
+                    loss, _ = criterion(output, high, illum)
+                
+                scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
+                scaler.step(optimizer)
+                scaler.update()
+            else:
                 output = model(low)
                 illum, _ = model.get_illumination_map(low)
-                loss, _ = criterion(output, high, illum)  # HybridLoss returns (loss, dict)
-            
-            scaler.scale(loss).backward()
-            scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            scaler.step(optimizer)
-            scaler.update()
+                loss, _ = criterion(output, high, illum)
+                
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
+                optimizer.step()
             
             total_loss += loss.item()
             pbar.set_postfix({'loss': f'{loss.item():.4f}'})
