@@ -959,19 +959,20 @@ class SwinLLIE(nn.Module):
             nn.init.constant_(m.weight, 1.0)
     
     def check_image_size(self, x):
-        """Pad image to be divisible by window size."""
+        """Pad image to be divisible by window size at ALL encoder stages."""
         _, _, h, w = x.size()
-        pad_h = (self.window_size - h % self.window_size) % self.window_size
-        pad_w = (self.window_size - w % self.window_size) % self.window_size
         
-        # Also ensure divisible by 2^(num_stages-1) for downsampling
+        # After downsampling by 2^(num_stages-1), dimensions must still be divisible by window_size
+        # So we need: (h + pad_h) divisible by (window_size * 2^(num_stages-1))
         scale = 2 ** (self.num_stages - 1)
-        total_h = h + pad_h
-        total_w = w + pad_w
-        pad_h += (scale - total_h % scale) % scale
-        pad_w += (scale - total_w % scale) % scale
+        min_size = self.window_size * scale  # Minimum unit that ensures divisibility at all stages
         
-        x = F.pad(x, (0, pad_w, 0, pad_h), 'reflect')
+        # Calculate padding to make dimensions divisible by min_size
+        pad_h = (min_size - h % min_size) % min_size
+        pad_w = (min_size - w % min_size) % min_size
+        
+        if pad_h > 0 or pad_w > 0:
+            x = F.pad(x, (0, pad_w, 0, pad_h), 'reflect')
         return x
     
     def forward(self, x):
