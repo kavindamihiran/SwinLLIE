@@ -209,6 +209,122 @@ class IlluminationSmoothnessLoss(nn.Module):
         return grad_x.mean() + grad_y.mean()
 
 
+class EdgeSharpnessLoss(nn.Module):
+    """
+    Edge/Sharpness Preservation Loss using Sobel operators.
+    
+    CRITICAL for preventing blurry outputs!
+    
+    This loss ensures that edges in the enhanced image match the edges
+    in the ground truth. It uses Sobel filters to extract edge information
+    and penalizes differences.
+    
+    Mathematical formulation:
+        L_edge = ||Sobel(pred) - Sobel(target)||_1
+    
+    Also includes a Laplacian sharpness component to ensure overall sharpness.
+    """
+    
+    def __init__(self):
+        super().__init__()
+        
+        # Sobel filters for edge detection
+        sobel_x = torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=torch.float32)
+        sobel_y = torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32)
+        
+        # Laplacian filter for sharpness
+        laplacian = torch.tensor([[0, 1, 0], [1, -4, 1], [0, 1, 0]], dtype=torch.float32)
+        
+        # Register as buffers (will be moved to correct device automatically)
+        self.register_buffer('sobel_x', sobel_x.view(1, 1, 3, 3).repeat(3, 1, 1, 1))
+        self.register_buffer('sobel_y', sobel_y.view(1, 1, 3, 3).repeat(3, 1, 1, 1))
+        self.register_buffer('laplacian', laplacian.view(1, 1, 3, 3).repeat(3, 1, 1, 1))
+    
+    def get_edges(self, x):
+        """Extract edges using Sobel operators."""
+        edge_x = F.conv2d(x, self.sobel_x, padding=1, groups=3)
+        edge_y = F.conv2d(x, self.sobel_y, padding=1, groups=3)
+        edges = torch.sqrt(edge_x ** 2 + edge_y ** 2 + 1e-8)
+        return edges
+    
+    def get_laplacian(self, x):
+        """Extract Laplacian (second derivative) for sharpness."""
+        return F.conv2d(x, self.laplacian, padding=1, groups=3)
+    
+    def forward(self, pred, target):
+        """
+        Args:
+            pred: Predicted image (B, 3, H, W)
+            target: Target image (B, 3, H, W)
+        
+        Returns:
+            Edge sharpness loss (scalar)
+        """
+        # Edge preservation loss
+        pred_edges = self.get_edges(pred)
+        target_edges = self.get_edges(target)
+        edge_loss = F.l1_loss(pred_edges, target_edges)
+        
+        # Laplacian sharpness loss - penalize blurry outputs
+        pred_lap = self.get_laplacian(pred)
+        target_lap = self.get_laplacian(target)
+        sharpness_loss = F.l1_loss(pred_lap, target_lap)
+        
+        # Combined: edge matching + sharpness preservation
+        return edge_loss + 0.5 * sharpness_loss
+
+
+class HighFrequencyLoss(nn.Module):
+    """
+    High-Frequency Detail Preservation Loss.
+    
+    Uses Gaussian blur to separate low and high frequency components,
+    then ensures high-frequency details (textures, edges) are preserved.
+    
+    L_hf = ||HF(pred) - HF(target)||_1
+    
+    where HF(x) = x - Blur(x) extracts high-frequency components.
+    """
+    
+    def __init__(self, kernel_size=5, sigma=1.0):
+        super().__init__()
+        
+        # Create Gaussian kernel
+        x = torch.arange(kernel_size) - kernel_size // 2
+        gauss = torch.exp(-x.pow(2) / (2 * sigma ** 2))
+        gauss = gauss / gauss.sum()
+        
+        # 2D kernel
+        kernel_2d = gauss.unsqueeze(0) * gauss.unsqueeze(1)
+        kernel = kernel_2d.view(1, 1, kernel_size, kernel_size).repeat(3, 1, 1, 1)
+        
+        self.register_buffer('kernel', kernel)
+        self.kernel_size = kernel_size
+        self.padding = kernel_size // 2
+    
+    def get_low_freq(self, x):
+        """Extract low-frequency component using Gaussian blur."""
+        return F.conv2d(x, self.kernel, padding=self.padding, groups=3)
+    
+    def get_high_freq(self, x):
+        """Extract high-frequency component."""
+        return x - self.get_low_freq(x)
+    
+    def forward(self, pred, target):
+        """
+        Args:
+            pred: Predicted image (B, 3, H, W)
+            target: Target image (B, 3, H, W)
+        
+        Returns:
+            High-frequency loss (scalar)
+        """
+        pred_hf = self.get_high_freq(pred)
+        target_hf = self.get_high_freq(target)
+        
+        return F.l1_loss(pred_hf, target_hf)
+
+
 class SSIMLoss(nn.Module):
     """
     Structural Similarity Index (SSIM) Loss.
@@ -288,13 +404,15 @@ class HybridLoss(nn.Module):
     
     Combines multiple loss functions for optimal low-light enhancement:
     
-    L_total = λ1 * L_L1 + λ2 * L_VGG + λ3 * L_Color + λ4 * L_Smooth
+    L_total = λ1 * L_L1 + λ2 * L_VGG + λ3 * L_Color + λ4 * L_Smooth + λ5 * L_Edge + λ6 * L_HF
     
     Default weights (empirically determined):
         - λ1 = 1.0   (L1: main reconstruction)
         - λ2 = 0.1   (VGG: perceptual quality)
         - λ3 = 0.5   (Color: color preservation)
         - λ4 = 0.01  (Smooth: illumination regularization)
+        - λ5 = 1.0   (Edge: edge/sharpness preservation) - NEW!
+        - λ6 = 0.5   (HF: high-frequency detail preservation) - NEW!
     
     Usage:
         loss_fn = HybridLoss()
@@ -305,12 +423,15 @@ class HybridLoss(nn.Module):
         lambda_vgg: Weight for VGG perceptual loss
         lambda_color: Weight for color consistency loss
         lambda_smooth: Weight for illumination smoothness loss
+        lambda_edge: Weight for edge sharpness loss (NEW)
+        lambda_hf: Weight for high-frequency loss (NEW)
         use_ssim: Whether to include SSIM loss (optional)
         lambda_ssim: Weight for SSIM loss
     """
     
     def __init__(self, lambda_l1=1.0, lambda_vgg=0.1, lambda_color=0.5, 
-                 lambda_smooth=0.01, use_ssim=False, lambda_ssim=0.1):
+                 lambda_smooth=0.01, lambda_edge=1.0, lambda_hf=0.5,
+                 use_ssim=False, lambda_ssim=0.1):
         super().__init__()
         
         # Store weights
@@ -318,6 +439,8 @@ class HybridLoss(nn.Module):
         self.lambda_vgg = lambda_vgg
         self.lambda_color = lambda_color
         self.lambda_smooth = lambda_smooth
+        self.lambda_edge = lambda_edge
+        self.lambda_hf = lambda_hf
         self.use_ssim = use_ssim
         self.lambda_ssim = lambda_ssim
         
@@ -326,6 +449,8 @@ class HybridLoss(nn.Module):
         self.vgg_loss = VGGPerceptualLoss()
         self.color_loss = ColorConsistencyLoss()
         self.smooth_loss = IlluminationSmoothnessLoss()
+        self.edge_loss = EdgeSharpnessLoss()  # NEW for sharpness
+        self.hf_loss = HighFrequencyLoss()    # NEW for detail preservation
         
         if use_ssim:
             self.ssim_loss = SSIMLoss()
@@ -369,6 +494,18 @@ class HybridLoss(nn.Module):
             loss_dict['smooth'] = smooth.item()
             total_loss += self.lambda_smooth * smooth
         
+        # Edge Sharpness Loss (NEW - critical for sharp images)
+        if self.lambda_edge > 0:
+            edge = self.edge_loss(pred, target)
+            loss_dict['edge'] = edge.item()
+            total_loss += self.lambda_edge * edge
+        
+        # High-Frequency Detail Loss (NEW - preserves textures)
+        if self.lambda_hf > 0:
+            hf = self.hf_loss(pred, target)
+            loss_dict['hf'] = hf.item()
+            total_loss += self.lambda_hf * hf
+        
         # Optional SSIM Loss
         if self.use_ssim:
             ssim = self.ssim_loss(pred, target)
@@ -411,11 +548,19 @@ if __name__ == '__main__':
     smooth_loss = IlluminationSmoothnessLoss()
     print(f"   Smooth Loss: {smooth_loss(illum_map):.4f}")
     
-    print("\n5. Testing SSIM Loss...")
+    print("\n5. Testing Edge Sharpness Loss...")
+    edge_loss = EdgeSharpnessLoss()
+    print(f"   Edge Loss: {edge_loss(pred, target):.4f}")
+    
+    print("\n6. Testing High-Frequency Loss...")
+    hf_loss = HighFrequencyLoss()
+    print(f"   HF Loss: {hf_loss(pred, target):.4f}")
+    
+    print("\n7. Testing SSIM Loss...")
     ssim_loss = SSIMLoss()
     print(f"   SSIM Loss: {ssim_loss(pred, target):.4f}")
     
-    print("\n6. Testing Hybrid Loss...")
+    print("\n8. Testing Hybrid Loss (with new sharpness losses)...")
     hybrid_loss = HybridLoss(use_ssim=True)
     total, loss_dict = hybrid_loss(pred, target, illum_map)
     print(f"   Total Loss: {total:.4f}")

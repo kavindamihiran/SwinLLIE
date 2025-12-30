@@ -137,8 +137,7 @@ class IlluminationEstimationModule(nn.Module):
         # Blend rough and refined estimates (learned vs. prior)
         illum_map = 0.4 * rough_illum + 0.6 * illum_refined
         
-        # Apply smoothing to reduce noise
-        illum_map = self.smooth(illum_map)
+        # Light smoothing - reduce kernel size to preserve edges
         illum_map = torch.clamp(illum_map, 0.0, 1.0)
         
         # Create dark mask: invert so dark areas have high values
@@ -146,7 +145,8 @@ class IlluminationEstimationModule(nn.Module):
         dark_mask = 1.0 - illum_map
         
         # Enhance contrast of dark mask (make dark regions more pronounced)
-        dark_mask = torch.pow(dark_mask, 0.8)  # Gamma correction to enhance dark regions
+        # Use stronger gamma for more aggressive dark region targeting
+        dark_mask = torch.pow(dark_mask, 0.6)  # Stronger gamma for sharper enhancement
         
         return illum_map, dark_mask
 
@@ -197,32 +197,37 @@ class IlluminationGuidedAttention(nn.Module):
         )
         
         # Spatial attention branch - process dark mask with feature guidance
+        # Use InstanceNorm instead of BatchNorm to preserve spatial details
         self.spatial_conv = nn.Sequential(
             nn.Conv2d(dim + 1, dim // reduction, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(dim // reduction),
-            nn.ReLU(inplace=True),
+            nn.InstanceNorm2d(dim // reduction, affine=True),
+            nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(dim // reduction, 1, kernel_size=3, padding=1, bias=False),
         )
         
-        # Dark region enhancement branch
+        # Dark region enhancement branch with edge-aware processing
         self.dark_enhance = nn.Sequential(
             nn.Conv2d(dim, dim, kernel_size=3, padding=1, groups=dim, bias=False),  # Depthwise
-            nn.BatchNorm2d(dim),
-            nn.ReLU(inplace=True),
+            nn.InstanceNorm2d(dim, affine=True),  # InstanceNorm preserves details better
+            nn.LeakyReLU(0.2, inplace=True),
             nn.Conv2d(dim, dim, kernel_size=1, bias=False),  # Pointwise
-            nn.BatchNorm2d(dim),
+            nn.InstanceNorm2d(dim, affine=True),
         )
         
-        # Learnable scaling parameters with proper initialization
-        self.alpha_scale = nn.Parameter(torch.ones(1) * 0.1)  # Start small for stability
-        self.beta_scale = nn.Parameter(torch.ones(1) * 0.1)
+        # Edge enhancement branch for sharpness
+        self.edge_enhance = nn.Sequential(
+            nn.Conv2d(dim, dim, kernel_size=3, padding=1, bias=False),
+            nn.InstanceNorm2d(dim, affine=True),
+            nn.LeakyReLU(0.2, inplace=True),
+        )
         
-        # Layer normalization for output stability
-        # Use adaptive num_groups to handle various channel dimensions
-        num_groups = min(8, dim)
-        while dim % num_groups != 0 and num_groups > 1:
-            num_groups -= 1
-        self.norm = nn.GroupNorm(num_groups=num_groups, num_channels=dim)
+        # Learnable scaling parameters - STRONGER initial values for sharper results
+        self.alpha_scale = nn.Parameter(torch.ones(1) * 0.5)  # Increased from 0.1
+        self.beta_scale = nn.Parameter(torch.ones(1) * 0.5)   # Increased from 0.1
+        self.edge_scale = nn.Parameter(torch.ones(1) * 0.3)   # Edge enhancement weight
+        
+        # Use InstanceNorm instead of GroupNorm for better spatial detail preservation
+        self.norm = nn.InstanceNorm2d(dim, affine=True)
         
         self._init_weights()
     
@@ -271,22 +276,28 @@ class IlluminationGuidedAttention(nn.Module):
         spatial_att = torch.sigmoid(self.spatial_conv(spatial_input))
         
         # 4. Combined attention mask - focus more on dark regions
-        # Multiply spatial attention with dark mask to ensure we only enhance dark areas
-        attention_mask = spatial_att * dark_mask_resized
+        # Use softer blending to allow more general enhancement
+        attention_mask = spatial_att * (0.5 + 0.5 * dark_mask_resized)
         
         # 5. Dark region enhancement branch
         enhanced_features = self.dark_enhance(features)
         
-        # 6. Apply illumination-guided modulation with residual design
-        # F_out = F_in * (1 + α * channel_att * attention_mask) + β * attention_mask * F_enhanced
+        # 6. Edge enhancement for sharpness
+        edge_features = self.edge_enhance(features)
+        
+        # 7. Apply illumination-guided modulation with stronger effect
+        # F_out = F_in * (1 + α * channel_att * attention_mask) + β * attention_mask * F_enhanced + γ * edge
         modulation = 1.0 + self.alpha_scale * channel_att * attention_mask
         modulated_features = features * modulation + self.beta_scale * attention_mask * enhanced_features
         
-        # 7. Normalize for training stability
+        # 8. Add edge enhancement for sharper results
+        modulated_features = modulated_features + self.edge_scale * edge_features
+        
+        # 9. Light normalization that preserves details
         modulated_features = self.norm(modulated_features)
         
-        # 8. Residual connection for gradient flow
-        output = modulated_features + features
+        # 10. Scaled residual connection to allow more modification
+        output = 0.8 * modulated_features + 0.2 * features
         
         return output
 
