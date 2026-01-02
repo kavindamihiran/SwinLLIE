@@ -6,7 +6,7 @@ import argparse
 import numpy as np
 import yaml
 import torch
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import GradScaler, autocast
 from tqdm import tqdm
 from swinllie import SwinLLIE, HybridLoss, get_dataloader
 from swinllie.utils import calculate_psnr, calculate_ssim
@@ -64,6 +64,7 @@ if __name__ == '__main__':
     DATASET = dataset_cfg['root_dir']
     SAVE_DIR = train_cfg['save_dir']
     EVAL_INTERVAL = val_cfg['val_freq']
+    SAVE_FREQ = train_cfg.get('save_freq', 20)
     WARMUP_EPOCHS = train_cfg.get('warmup_epochs', 5)
     MIN_LR = train_cfg.get('min_lr', 1e-6)
     GRAD_CLIP = train_cfg.get('grad_clip', 1.0)
@@ -115,7 +116,6 @@ if __name__ == '__main__':
         lambda_color=loss_cfg.get('lambda_color', 0.5),
         lambda_smooth=loss_cfg.get('lambda_smooth', 0.01),
         lambda_edge=loss_cfg.get('lambda_edge', 1.0),
-        lambda_hf=loss_cfg.get('lambda_hf', 0.5),
         lambda_exposure=loss_cfg.get('lambda_exposure', 1.0),
         use_ssim=loss_cfg.get('use_ssim', False),
         lambda_ssim=loss_cfg.get('lambda_ssim', 0.1)
@@ -170,7 +170,7 @@ if __name__ == '__main__':
             optimizer.zero_grad()
             
             if USE_AMP and scaler is not None:
-                with autocast():
+                with autocast('cuda'):
                     output = model(low)
                     illum, dark_mask, bright_mask = model.get_illumination_map(low)
                     loss, _ = criterion(output, high, illum, bright_mask)
@@ -199,7 +199,7 @@ if __name__ == '__main__':
         # Track best loss within each 10-epoch interval
         if avg_loss < interval_best_loss:
             interval_best_loss = avg_loss
-            interval_best_state = model.state_dict().copy()
+            interval_best_state = {k: v.clone() for k, v in model.state_dict().items()}
         
         # At every 10th epoch, evaluate PSNR/SSIM on best-loss model from interval
         if (epoch + 1) % EVAL_INTERVAL == 0:
@@ -221,7 +221,7 @@ if __name__ == '__main__':
             interval_best_loss = float('inf')
             interval_best_state = None
         
-        if (epoch + 1) % 20 == 0:
+        if (epoch + 1) % SAVE_FREQ == 0:
             torch.save({'model_state_dict': model.state_dict(), 'epoch': epoch}, f'{SAVE_DIR}/checkpoints/epoch_{epoch+1}.pth')
 
     # Final save

@@ -301,7 +301,7 @@ def get_dataloader(dataset_type, root_dir, split='train', batch_size=8,
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=num_workers,
-        pin_memory=pin_memory,
+        pin_memory=pin_memory and torch.cuda.is_available(),
         drop_last=(split == 'train')
     )
     
