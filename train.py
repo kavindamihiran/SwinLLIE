@@ -171,8 +171,7 @@ if __name__ == '__main__':
             if USE_AMP and scaler is not None:
                 with autocast('cuda'):
                     output = model(low)
-                    illum, dark_mask, bright_mask = model.get_illumination_map(low)
-                    loss, _ = criterion(output, high, illum, bright_mask)
+                    loss, _ = criterion(output, high)
                 
                 scaler.scale(loss).backward()
                 scaler.unscale_(optimizer)
@@ -181,8 +180,7 @@ if __name__ == '__main__':
                 scaler.update()
             else:
                 output = model(low)
-                illum, dark_mask, bright_mask = model.get_illumination_map(low)
-                loss, _ = criterion(output, high, illum, bright_mask)
+                loss, _ = criterion(output, high)
                 
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)

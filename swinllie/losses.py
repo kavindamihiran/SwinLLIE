@@ -343,8 +343,8 @@ class HybridLoss(nn.Module):
         Args:
             pred: Enhanced image (B, 3, H, W) in [0, 1]
             target: Ground truth (B, 3, H, W) in [0, 1]
-            illum_map: Optional illumination map for smoothness
-            bright_mask: Optional bright mask for exposure control
+            illum_map: Optional illumination map for smoothness (deprecated)
+            bright_mask: Optional bright mask for exposure control (deprecated)
         
         Returns:
             total_loss: Combined scalar loss
@@ -376,19 +376,13 @@ class HybridLoss(nn.Module):
             loss_dict['edge'] = edge.item()
             total += self.lambda_edge * edge
         
-        # 5. Exposure Control
+        # 5. Exposure Control (simplified - without bright mask)
         if self.lambda_exposure > 0:
-            exposure = self.exposure_loss(pred, target, bright_mask)
+            exposure = self.exposure_loss(pred, target)
             loss_dict['exposure'] = exposure.item()
             total += self.lambda_exposure * exposure
         
-        # 6. Illumination Smoothness (optional)
-        if illum_map is not None and self.lambda_smooth > 0:
-            smooth = self.smooth_loss(illum_map)
-            loss_dict['smooth'] = smooth.item()
-            total += self.lambda_smooth * smooth
-        
-        # 7. SSIM (optional)
+        # 6. SSIM (optional)
         if self.use_ssim:
             ssim = self.ssim_loss(pred, target)
             loss_dict['ssim'] = ssim.item()
