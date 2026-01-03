@@ -330,5 +330,5 @@ out = conv_last(conv_after(dec1) + shallow) + x  # (1, 3, 128, 128)
 | Attention | Window only | Window + Illumination-guided |
 | Architecture | Single-scale | U-Net encoder-decoder |
 | Normalization | LayerNorm only | LayerNorm + InstanceNorm in attention |
-| Loss | L1 | Hybrid (L1+VGG+Color+Edge+Exposure) |
+| Loss | L1 | Hybrid (L1+VGG+Color+Edge+Detail+Exposure) |
 | Parameters | ~12M (large) | ~6.5M (efficient) |

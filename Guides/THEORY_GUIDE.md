@@ -215,7 +215,7 @@ This means:
 
 ## Loss Functions Explained
 
-We use 5 losses that each handle a different aspect:
+We use 6 losses that each handle a different aspect:
 
 ### 1. L1 Loss (Reconstruction)
 
@@ -261,24 +261,44 @@ Without Color Loss:     With Color Loss:
 └────────────────┘      └────────────────┘
 ```
 
-### 4. Edge Loss
+### 4. Edge Loss (Enhanced with Laplacian)
 
 ```
-L_edge = ||Sobel(pred) - Sobel(target)||₁
+L_edge = ||edges(pred) - edges(target)||₁
+where edges = 0.7 × Sobel + 0.3 × Laplacian
 ```
 
 **What it does**: Ensures edges are sharp
 **Why we need it**: Maintains structural sharpness
 
 ```
-Sobel filters detect edges:
-[-1  0  1]     [-1 -2 -1]
-[-2  0  2]     [ 0  0  0]
-[-1  0  1]     [ 1  2  1]
- horizontal     vertical
+Sobel (strong edges):     Laplacian (fine details):
+[-1  0  1]  [-1 -2 -1]    [ 0  1  0]
+[-2  0  2]  [ 0  0  0]    [ 1 -4  1]
+[-1  0  1]  [ 1  2  1]    [ 0  1  0]
+ horizontal   vertical     all directions
 ```
 
-### 5. Exposure Control Loss
+### 5. High-Frequency Detail Loss (NEW)
+
+```
+L_detail = ||high_freq(pred) - high_freq(target)||₁
+where high_freq = original - blurred
+```
+
+**What it does**: Preserves micro-textures (skin pores, fabric patterns)
+**Why we need it**: Catches subtle details that EdgeLoss misses
+
+```
+Original - Gaussian_Blur = Fine Details Only
+
+This extracts:
+- Subtle textures
+- Small patterns
+- Micro-edges
+```
+
+### 6. Exposure Control Loss
 
 ```
 L_exp = overexposure_penalty + bright_region_preservation
@@ -290,7 +310,7 @@ L_exp = overexposure_penalty + bright_region_preservation
 ### Combined Loss
 
 ```
-L_total = 1.0×L1 + 0.1×VGG + 0.5×Color + 0.5×Edge + 0.5×Exposure
+L_total = 1.0×L1 + 0.15×VGG + 0.5×Color + 0.6×Edge + 0.3×Detail + 0.5×Exposure
 ```
 
 ---
@@ -352,12 +372,13 @@ swinllie/
 │   └── SwinLLIE               # Full model
 │
 ├── losses.py   # Loss functions
-│   ├── L1Loss                 # Pixel reconstruction
-│   ├── VGGPerceptualLoss      # Feature matching
-│   ├── ColorConsistencyLoss   # Color preservation
-│   ├── EdgeLoss               # Sharpness
-│   ├── ExposureControlLoss    # Overexposure prevention
-│   └── HybridLoss             # Combined loss
+│   ├── L1Loss                    # Pixel reconstruction
+│   ├── VGGPerceptualLoss         # Feature matching
+│   ├── ColorConsistencyLoss      # Color preservation
+│   ├── EdgeLoss                  # Sharpness (Sobel + Laplacian)
+│   ├── HighFrequencyDetailLoss   # NEW: Micro-texture preservation
+│   ├── ExposureControlLoss       # Overexposure prevention
+│   └── HybridLoss                # Combined loss
 │
 ├── data.py     # Dataset loaders
 └── utils.py    # PSNR, SSIM metrics
@@ -408,4 +429,4 @@ loss, breakdown = criterion(enhanced, target, illum, bright)
 2. **Retinex theory** = Image = Reflectance × Illumination
 3. **Window attention** = efficient self-attention in local windows
 4. **Our key innovation** = SimpleIllumAttention adapts enhancement spatially
-5. **5 losses** = L1, VGG, Color, Edge, Exposure work together
+5. **6 losses** = L1, VGG, Color, Edge, Detail, Exposure work together

@@ -118,18 +118,23 @@ learning_rate: 0.00002  # 2e-5
 ### Loss Weights for Different Goals
 
 ```yaml
-# Default (balanced)
+# Default (balanced, optimized for fine details)
 lambda_l1: 1.0
-lambda_vgg: 0.1
+lambda_vgg: 0.15
 lambda_color: 0.5
-lambda_edge: 0.5
+lambda_edge: 0.6
+lambda_detail: 0.3     # NEW: preserves micro-textures
 lambda_exposure: 0.5
 
 # Sharper outputs
 lambda_edge: 1.0       # Increase edge weight
+lambda_detail: 0.5     # Increase detail weight
 
 # Better colors
 lambda_color: 1.0      # Increase color weight
+
+# Preserve fine details (textures, patterns)
+lambda_detail: 0.5     # Increase for micro-texture preservation
 
 # Prevent overexposure
 lambda_exposure: 1.0   # Increase exposure weight
@@ -311,9 +316,10 @@ training:
 
 loss:
   lambda_l1: 1.0
-  lambda_vgg: 0.1
+  lambda_vgg: 0.15
   lambda_color: 0.5
-  lambda_edge: 0.5
+  lambda_edge: 0.6
+  lambda_detail: 0.3    # NEW: micro-texture preservation
   lambda_exposure: 0.5
 
 resume:

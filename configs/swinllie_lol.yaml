@@ -68,11 +68,12 @@ training:
 # =============================================================================
 loss:
   lambda_l1: 1.0
-  lambda_vgg: 0.1
+  lambda_vgg: 0.15          # Increased for better texture preservation
   lambda_color: 0.5
   lambda_smooth: 0.01
-  lambda_edge: 1.0
-  lambda_exposure: 1.0  # Prevents overexposure in bright regions
+  lambda_edge: 0.6          # Enhanced with Laplacian for fine edges
+  lambda_detail: 0.3        # NEW: preserves micro-textures
+  lambda_exposure: 0.5      # Prevents overexposure in bright regions
   use_ssim: false
   lambda_ssim: 0.1
 

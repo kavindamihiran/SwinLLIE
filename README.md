@@ -6,7 +6,7 @@ A beginner-friendly deep learning model for low-light image enhancement using Sw
 
 - **Simple Architecture**: Clean, well-documented code easy to understand
 - **Illumination-Guided Attention**: Enhances dark regions more, protects bright regions
-- **5 Core Losses**: L1 + VGG + Color + Edge + Exposure (streamlined from 7)
+- **6 Core Losses**: L1 + VGG + Color + Edge + Detail + Exposure (optimized for fine details)
 - **Smart GPU/CPU Fallback**: Automatic detection with seamless fallback
 - **~6.5M Parameters**: Efficient for training and inference
 
@@ -118,9 +118,10 @@ output = features + gamma * (enhanced * dark_mask)
 | Loss | Weight | Purpose |
 |------|--------|---------|
 | L1 | 1.0 | Main reconstruction |
-| VGG | 0.1 | Perceptual quality (prevents blur) |
+| VGG | 0.15 | Perceptual quality (prevents blur) |
 | Color | 0.5 | Color preservation |
-| Edge | 0.5 | Sharpness |
+| Edge | 0.6 | Sharpness (Sobel + Laplacian for fine edges) |
+| Detail | 0.3 | **NEW** - Preserves micro-textures |
 | Exposure | 0.5 | Prevent overexposure |
 
 Optional: Smoothness (0.01), SSIM (0.1)
@@ -147,9 +148,10 @@ training:
 
 loss:
   lambda_l1: 1.0
-  lambda_vgg: 0.1
+  lambda_vgg: 0.15
   lambda_color: 0.5
-  lambda_edge: 0.5
+  lambda_edge: 0.6
+  lambda_detail: 0.3    # NEW: preserves fine textures
   lambda_exposure: 0.5
 ```
 
@@ -160,6 +162,7 @@ loss:
 | Problem | Solution |
 |---------|----------|
 | Blurry outputs | Increase `lambda_edge` to 1.0 |
+| Losing fine details | Increase `lambda_detail` to 0.5 |
 | Gray/washed out | Increase `lambda_color` to 1.0 |
 | Overexposed spots | Increase `lambda_exposure` to 1.0 |
 | GPU OOM | Reduce `batch_size` to 2 or 1 |

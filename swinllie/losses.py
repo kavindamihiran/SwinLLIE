@@ -142,28 +142,88 @@ class EdgeLoss(nn.Module):
         - Enhancement often blurs edges
         - This ensures edges in output match edges in target
     
-    Uses Sobel filters to detect edges.
+    Uses Sobel filters (coarse edges) + Laplacian filter (fine details).
+    The Laplacian catches small details that Sobel misses.
     """
     
-    def __init__(self):
+    def __init__(self, use_laplacian=True):
         super().__init__()
+        self.use_laplacian = use_laplacian
         
-        # Sobel edge detection filters
+        # Sobel edge detection filters (for strong edges)
         sobel_x = torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=torch.float32)
         sobel_y = torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32)
         
         self.register_buffer('sobel_x', sobel_x.view(1, 1, 3, 3).repeat(3, 1, 1, 1))
         self.register_buffer('sobel_y', sobel_y.view(1, 1, 3, 3).repeat(3, 1, 1, 1))
+        
+        # Laplacian filter (for fine details - catches texture/micro-edges)
+        # This filter detects rapid intensity changes in ALL directions
+        laplacian = torch.tensor([[0, 1, 0], [1, -4, 1], [0, 1, 0]], dtype=torch.float32)
+        self.register_buffer('laplacian', laplacian.view(1, 1, 3, 3).repeat(3, 1, 1, 1))
     
     def get_edges(self, x):
+        # Sobel: gradient magnitude (strong edges)
         edge_x = F.conv2d(x, self.sobel_x, padding=1, groups=3)
         edge_y = F.conv2d(x, self.sobel_y, padding=1, groups=3)
-        return torch.sqrt(edge_x ** 2 + edge_y ** 2 + 1e-8)
+        sobel_edges = torch.sqrt(edge_x ** 2 + edge_y ** 2 + 1e-8)
+        
+        if self.use_laplacian:
+            # Laplacian: second derivative (fine details)
+            laplacian_edges = torch.abs(F.conv2d(x, self.laplacian, padding=1, groups=3))
+            # Combine: Sobel (70%) + Laplacian (30%) for balanced detection
+            return 0.7 * sobel_edges + 0.3 * laplacian_edges
+        
+        return sobel_edges
     
     def forward(self, pred, target):
         pred_edges = self.get_edges(pred)
         target_edges = self.get_edges(target)
         return F.l1_loss(pred_edges, target_edges)
+
+
+# =============================================================================
+# High-Frequency Detail Loss
+# =============================================================================
+
+class HighFrequencyDetailLoss(nn.Module):
+    """
+    High-Frequency Detail Loss: Preserve micro-textures and fine patterns.
+    
+    Why it matters:
+        - EdgeLoss catches obvious edges
+        - This catches subtle textures (skin pores, fabric patterns, etc.)
+    
+    How it works:
+        - Subtracts blurred image from original = high-frequency details
+        - Compares these details between pred and target
+    """
+    
+    def __init__(self, kernel_size=5):
+        super().__init__()
+        self.kernel_size = kernel_size
+        self.padding = kernel_size // 2
+        
+        # Create Gaussian blur kernel (for extracting low-frequency)
+        sigma = kernel_size / 3.0
+        coords = torch.arange(kernel_size, dtype=torch.float32) - kernel_size // 2
+        gauss_1d = torch.exp(-coords ** 2 / (2 * sigma ** 2))
+        gauss_1d = gauss_1d / gauss_1d.sum()
+        gauss_2d = gauss_1d.unsqueeze(1) @ gauss_1d.unsqueeze(0)
+        self.register_buffer('blur_kernel', gauss_2d.view(1, 1, kernel_size, kernel_size).repeat(3, 1, 1, 1))
+    
+    def get_high_freq(self, x):
+        """Extract high-frequency details by subtracting blurred version."""
+        # Blur the image (removes fine details)
+        low_freq = F.conv2d(x, self.blur_kernel, padding=self.padding, groups=3)
+        # Original - Blurred = Fine details only
+        high_freq = x - low_freq
+        return high_freq
+    
+    def forward(self, pred, target):
+        pred_hf = self.get_high_freq(pred)
+        target_hf = self.get_high_freq(target)
+        return F.l1_loss(pred_hf, target_hf)
 
 
 # =============================================================================
@@ -306,9 +366,10 @@ class HybridLoss(nn.Module):
     
     def __init__(self, 
                  lambda_l1=1.0, 
-                 lambda_vgg=0.1, 
+                 lambda_vgg=0.15,      # Increased: better texture preservation
                  lambda_color=0.5,
-                 lambda_edge=0.5,
+                 lambda_edge=0.6,      # Increased: sharper edges
+                 lambda_detail=0.3,    # NEW: high-frequency detail loss
                  lambda_exposure=0.5,
                  lambda_smooth=0.01,
                  use_ssim=False, 
@@ -320,6 +381,7 @@ class HybridLoss(nn.Module):
         self.lambda_vgg = lambda_vgg
         self.lambda_color = lambda_color
         self.lambda_edge = lambda_edge
+        self.lambda_detail = lambda_detail  # NEW
         self.lambda_exposure = lambda_exposure
         self.lambda_smooth = lambda_smooth
         self.use_ssim = use_ssim
@@ -329,7 +391,8 @@ class HybridLoss(nn.Module):
         self.l1_loss = L1Loss()
         self.vgg_loss = VGGPerceptualLoss()
         self.color_loss = ColorConsistencyLoss()
-        self.edge_loss = EdgeLoss()
+        self.edge_loss = EdgeLoss(use_laplacian=True)  # Now with Laplacian!
+        self.detail_loss = HighFrequencyDetailLoss()   # NEW
         self.exposure_loss = ExposureControlLoss()
         self.smooth_loss = IlluminationSmoothnessLoss()
         
@@ -370,25 +433,31 @@ class HybridLoss(nn.Module):
             loss_dict['color'] = color.item()
             total += self.lambda_color * color
         
-        # 4. Edge Sharpness
+        # 4. Edge Sharpness (now includes Laplacian for fine edges)
         if self.lambda_edge > 0:
             edge = self.edge_loss(pred, target)
             loss_dict['edge'] = edge.item()
             total += self.lambda_edge * edge
         
-        # 5. Exposure Control
+        # 5. High-Frequency Details (NEW - preserves micro-textures)
+        if self.lambda_detail > 0:
+            detail = self.detail_loss(pred, target)
+            loss_dict['detail'] = detail.item()
+            total += self.lambda_detail * detail
+        
+        # 6. Exposure Control
         if self.lambda_exposure > 0:
             exposure = self.exposure_loss(pred, target, bright_mask)
             loss_dict['exposure'] = exposure.item()
             total += self.lambda_exposure * exposure
         
-        # 6. Illumination Smoothness (optional)
+        # 7. Illumination Smoothness (optional)
         if illum_map is not None and self.lambda_smooth > 0:
             smooth = self.smooth_loss(illum_map)
             loss_dict['smooth'] = smooth.item()
             total += self.lambda_smooth * smooth
         
-        # 7. SSIM (optional)
+        # 8. SSIM (optional)
         if self.use_ssim:
             ssim = self.ssim_loss(pred, target)
             loss_dict['ssim'] = ssim.item()
@@ -427,10 +496,11 @@ if __name__ == '__main__':
     print("\n1. L1 Loss:", L1Loss()(pred, target).item())
     print("2. VGG Loss:", VGGPerceptualLoss()(pred, target).item())
     print("3. Color Loss:", ColorConsistencyLoss()(pred, target).item())
-    print("4. Edge Loss:", EdgeLoss()(pred, target).item())
-    print("5. Exposure Loss:", ExposureControlLoss()(pred, target, bright).item())
-    print("6. Smooth Loss:", IlluminationSmoothnessLoss()(illum).item())
-    print("7. SSIM Loss:", SSIMLoss()(pred, target).item())
+    print("4. Edge Loss (with Laplacian):", EdgeLoss(use_laplacian=True)(pred, target).item())
+    print("5. Detail Loss (NEW):", HighFrequencyDetailLoss()(pred, target).item())
+    print("6. Exposure Loss:", ExposureControlLoss()(pred, target, bright).item())
+    print("7. Smooth Loss:", IlluminationSmoothnessLoss()(illum).item())
+    print("8. SSIM Loss:", SSIMLoss()(pred, target).item())
     
     # Test hybrid loss
     print("\n8. Hybrid Loss:")
