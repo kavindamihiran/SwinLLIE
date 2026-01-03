@@ -1,14 +1,15 @@
-# Understanding Swin-LLIE: Theory and Architecture
+# Understanding SwinIR for Low-Light Enhancement
 
-A beginner-friendly guide explaining the theory behind low-light image enhancement with Swin Transformers.
+A guide explaining the theory behind low-light image enhancement using pure Swin Transformers.
 
 ---
 
 ## Table of Contents
+
 1. [The Low-Light Problem](#the-low-light-problem)
-2. [Retinex Theory](#retinex-theory)
-3. [How Attention Works](#how-attention-works)
-4. [Our Simplified Architecture](#our-simplified-architecture)
+2. [Swin Transformer Approach](#swin-transformer-approach)
+3. [Multi-Scale Processing](#multi-scale-processing)
+4. [Pure SwinIR Architecture](#pure-swinir-architecture)
 5. [Loss Functions Explained](#loss-functions-explained)
 6. [Training Tips](#training-tips)
 
@@ -31,25 +32,75 @@ Normal Light Image          Low Light Image
 ### The challenge
 
 We want to **enhance** dark regions while **preserving** bright regions:
+
 - Dark areas → Brighten and reveal details
 - Bright areas → Keep as-is (avoid overexposure)
 
 ---
 
-## Retinex Theory
+## Swin Transformer Approach
 
-### The basic idea
+### Why Swin Transformers for images?
 
-Retinex theory (Retina + Cortex) says every image is made of two parts:
+Traditional transformers work great for text, but images have special properties:
 
 ```
-Image = Reflectance × Illumination
-  I   =     R      ×      L
-
-Where:
-- R = What things actually look like (colors, textures)
-- L = How much light is shining on them
+Text:     "The cat sat on the mat"
+          ↓ (linear sequence)
+Image:    2D grid of pixels with spatial relationships
+          ↓ (local patterns + global context)
 ```
+
+**Swin Transformer** solves this with:
+
+1. **Local attention**: Look at small windows first
+2. **Shifted windows**: Connect different regions
+3. **Hierarchical**: Start small, grow bigger (like a pyramid)
+
+### Window-based attention
+
+Instead of looking at the entire image at once:
+
+```
+Full Image (too expensive)     Window-based (efficient)
+┌─────────────────────┐        ┌───┬───┬───┐
+│ Every pixel         │  →     │ A │ B │ C │  Each window
+│ looks at            │        ├───┼───┼───┤  attends to
+│ every other pixel   │        │ D │ E │ F │  itself only
+└─────────────────────┘        └───┴───┴───┘
+```
+
+---
+
+## Multi-Scale Processing
+
+### Encoder-Decoder with Skip Connections
+
+Our model processes images at multiple scales:
+
+```
+Input (256×256)
+    ↓ Stage 1: Local details (Window=8×8)
+    ↓ Downsample ÷2
+Features (128×128)
+    ↓ Stage 2: Medium patterns
+    ↓ Downsample ÷2
+Features (64×64)
+    ↓ Stage 3: Global context
+    ↑ Upsample ×2
+    ↑ + Skip connection from Stage 2
+    ↑ Upsample ×2
+    ↑ + Skip connection from Stage 1
+Output (256×256)
+```
+
+Why this works:
+
+- **Small scale**: Fine details, textures, edges
+- **Medium scale**: Objects, patterns
+- **Large scale**: Overall illumination, global structure
+
+````
 
 ### Why this matters
 
@@ -66,12 +117,12 @@ Then we get a properly lit image!
 class IlluminationEstimator(nn.Module):
     """
     Estimates which regions are dark vs bright.
-    
+
     Output:
         dark_mask = 1 where dark (needs enhancement)
         dark_mask = 0 where bright (preserve as-is)
     """
-```
+````
 
 ---
 
@@ -178,13 +229,13 @@ This is the **core innovation** - adaptive enhancement based on darkness:
 class SimpleIllumAttention(nn.Module):
     """
     Enhances dark regions more than bright regions.
-    
+
     Step 1: Channel Attention
             Which feature channels are important?
-            
-    Step 2: Spatial Modulation  
+
+    Step 2: Spatial Modulation
             Combine features with dark_mask to know WHERE to enhance
-            
+
     Step 3: Apply with learnable weight
             output = features + gamma * enhanced
             (gamma starts at 0, learns during training)
@@ -207,6 +258,7 @@ Output = Input + Enhancement
 ```
 
 This means:
+
 - Network only needs to learn the **difference** (easier!)
 - If enhancement is bad, it outputs 0 (keeps original)
 - Gradients flow easily during training
@@ -327,13 +379,13 @@ Training on patches is faster and provides data augmentation.
 
 ### 4. Common Issues
 
-| Problem | Solution |
-|---------|----------|
-| Blurry outputs | Increase `lambda_edge` |
-| Gray/washed out | Increase `lambda_color` |
+| Problem           | Solution                   |
+| ----------------- | -------------------------- |
+| Blurry outputs    | Increase `lambda_edge`     |
+| Gray/washed out   | Increase `lambda_color`    |
 | Overexposed spots | Increase `lambda_exposure` |
-| Noisy outputs | Decrease learning rate |
-| Training unstable | Enable gradient clipping |
+| Noisy outputs     | Decrease learning rate     |
+| Training unstable | Enable gradient clipping   |
 
 ---
 

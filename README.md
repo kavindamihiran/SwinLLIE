@@ -1,24 +1,24 @@
-# Swin-LLIE: Simplified Low-Light Image Enhancement
+# SwinIR: Pure Low-Light Image Enhancement
 
-A beginner-friendly deep learning model for low-light image enhancement using Swin Transformers with illumination-guided attention.
+A clean implementation of SwinIR (Swin Transformer for Image Restoration) specifically designed for low-light image enhancement without additional attention mechanisms.
 
 ## 🌟 Key Features
 
-- **Simple Architecture**: Clean, well-documented code easy to understand
-- **Illumination-Guided Attention**: Enhances dark regions more, protects bright regions
-- **5 Core Losses**: L1 + VGG + Color + Edge + Exposure (streamlined from 7)
+- **Pure SwinIR Architecture**: Clean implementation of the core Swin Transformer for image restoration
+- **Simple and Efficient**: No additional attention mechanisms - just the proven SwinIR approach
+- **Multi-scale Processing**: Encoder-decoder with skip connections
 - **Smart GPU/CPU Fallback**: Automatic detection with seamless fallback
-- **~6.5M Parameters**: Efficient for training and inference
+- **~4M Parameters**: Efficient for training and inference
 
 ---
 
 ## 📁 Project Structure
 
 ```
-SwinLLIE/
+SwinIR/
 ├── swinllie/                 # Main module
-│   ├── models.py             # Model (680 lines, well-commented)
-│   ├── losses.py             # Loss functions (340 lines)
+│   ├── models.py             # Pure SwinIR model (400 lines, well-commented)
+│   ├── losses.py             # Loss functions
 │   ├── data.py               # Dataset loaders
 │   └── utils.py              # PSNR, SSIM metrics
 ├── configs/
@@ -26,7 +26,7 @@ SwinLLIE/
 ├── datasets/LOL/             # Dataset folder
 ├── experiments/              # Checkpoints and logs
 ├── Guides/                   # Documentation
-│   ├── THEORY_GUIDE.md       # ⭐ Beginner-friendly theory explanation
+│   ├── THEORY_GUIDE.md       # ⭐ Theory explanation
 │   ├── ARCHITECTURE.md       # Model architecture details
 │   └── FINE_TUNING_GUIDE.md  # Fine-tuning instructions
 ├── train.py                  # Training script
@@ -74,6 +74,7 @@ python inference.py
 ## 🧠 How It Works
 
 ### The Problem
+
 Dark images have: low brightness, washed colors, noise, blurry edges.
 
 ### Our Solution
@@ -102,12 +103,12 @@ output = features + gamma * (enhanced * dark_mask)
 
 ## ⚙️ Model Architecture
 
-| Component | Description |
-|-----------|-------------|
-| `IlluminationEstimator` | 3-layer CNN estimates dark regions |
-| `SimpleIllumAttention` | Channel + Spatial attention guided by darkness |
-| `RSTB` | Residual Swin Transformer Block |
-| `SwinLLIE` | Full U-Net with 3 encoder + decoder stages |
+| Component               | Description                                    |
+| ----------------------- | ---------------------------------------------- |
+| `IlluminationEstimator` | 3-layer CNN estimates dark regions             |
+| `SimpleIllumAttention`  | Channel + Spatial attention guided by darkness |
+| `RSTB`                  | Residual Swin Transformer Block                |
+| `SwinLLIE`              | Full U-Net with 3 encoder + decoder stages     |
 
 **Parameters**: 6,488,071 (~6.5M)
 
@@ -115,13 +116,13 @@ output = features + gamma * (enhanced * dark_mask)
 
 ## 📊 Loss Functions
 
-| Loss | Weight | Purpose |
-|------|--------|---------|
-| L1 | 1.0 | Main reconstruction |
-| VGG | 0.1 | Perceptual quality (prevents blur) |
-| Color | 0.5 | Color preservation |
-| Edge | 0.5 | Sharpness |
-| Exposure | 0.5 | Prevent overexposure |
+| Loss     | Weight | Purpose                            |
+| -------- | ------ | ---------------------------------- |
+| L1       | 1.0    | Main reconstruction                |
+| VGG      | 0.1    | Perceptual quality (prevents blur) |
+| Color    | 0.5    | Color preservation                 |
+| Edge     | 0.5    | Sharpness                          |
+| Exposure | 0.5    | Prevent overexposure               |
 
 Optional: Smoothness (0.01), SSIM (0.1)
 
@@ -137,13 +138,13 @@ model:
   depths: [4, 4, 4]
   num_heads: [6, 6, 6]
   window_size: 8
-  use_igam: true  # Enable illumination attention
+  use_igam: true # Enable illumination attention
 
 training:
   batch_size: 4
   epochs: 100
   learning_rate: 0.0002
-  use_amp: true  # Mixed precision
+  use_amp: true # Mixed precision
 
 loss:
   lambda_l1: 1.0
@@ -157,23 +158,23 @@ loss:
 
 ## 🔧 Troubleshooting
 
-| Problem | Solution |
-|---------|----------|
-| Blurry outputs | Increase `lambda_edge` to 1.0 |
-| Gray/washed out | Increase `lambda_color` to 1.0 |
+| Problem           | Solution                          |
+| ----------------- | --------------------------------- |
+| Blurry outputs    | Increase `lambda_edge` to 1.0     |
+| Gray/washed out   | Increase `lambda_color` to 1.0    |
 | Overexposed spots | Increase `lambda_exposure` to 1.0 |
-| GPU OOM | Reduce `batch_size` to 2 or 1 |
-| Training slow | Enable `use_amp: true` |
+| GPU OOM           | Reduce `batch_size` to 2 or 1     |
+| Training slow     | Enable `use_amp: true`            |
 
 ---
 
 ## 📚 Documentation
 
-| Guide | Description |
-|-------|-------------|
-| [THEORY_GUIDE.md](Guides/THEORY_GUIDE.md) | ⭐ **Start here!** Beginner-friendly theory |
-| [ARCHITECTURE.md](Guides/ARCHITECTURE.md) | Detailed architecture |
-| [FINE_TUNING_GUIDE.md](Guides/FINE_TUNING_GUIDE.md) | Custom dataset training |
+| Guide                                               | Description                                 |
+| --------------------------------------------------- | ------------------------------------------- |
+| [THEORY_GUIDE.md](Guides/THEORY_GUIDE.md)           | ⭐ **Start here!** Beginner-friendly theory |
+| [ARCHITECTURE.md](Guides/ARCHITECTURE.md)           | Detailed architecture                       |
+| [FINE_TUNING_GUIDE.md](Guides/FINE_TUNING_GUIDE.md) | Custom dataset training                     |
 
 ---
 

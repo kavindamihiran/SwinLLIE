@@ -1,6 +1,6 @@
-# Swin-LLIE Architecture (Simplified)
+# SwinIR Architecture
 
-Detailed technical documentation for the simplified Swin-LLIE model.
+Detailed technical documentation for the pure SwinIR model for low-light image enhancement.
 
 ---
 
@@ -17,68 +17,58 @@ Detailed technical documentation for the simplified Swin-LLIE model.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                         SwinLLIE Model                               │
-│  Parameters: 6,488,071 (~6.5M)                                       │
+│                         SwinIR Model                                 │
+│  Parameters: ~4M                                                     │
 ├──────────────────────────────────────────────────────────────────────┤
 │                                                                      │
 │  Input (B, 3, H, W)                                                  │
 │       │                                                              │
-│       ├──────────────────────────────────────────────────────────┐   │
-│       │                                                          │   │
-│       ▼                                                          │   │
-│  ┌─────────────────────────┐                                    │   │
-│  │ IlluminationEstimator   │ → dark_mask, bright_mask           │   │
-│  │ (3-layer CNN, 32 hidden)│                                    │   │
-│  └─────────────────────────┘                                    │   │
-│       │                                                          │   │
-│       ▼                                                          │   │
-│  ┌─────────────────────────┐                                    │   │
-│  │    conv_first (3×3)     │ → Shallow features (B, 60, H, W)   │   │
-│  └─────────────────────────┘                                    │   │
-│       │                                                          │   │
-│  ═════╪═════════════════ ENCODER ═══════════════════════════    │   │
-│       │                                                          │   │
-│       ▼                                                          │   │
-│  ┌─────────────────────────┐                                    │   │
-│  │    RSTB Stage 1         │ dim=60, 4 blocks, 6 heads         │   │
-│  │    + SimpleIllumAtt     │                                    │   │
-│  └─────────────────────────┘                                    │   │
-│       │ ─────────────────────────────────────────────────┐       │   │
-│       ▼ (downsample 2×)                                  │       │   │
-│  ┌─────────────────────────┐                             │       │   │
-│  │    RSTB Stage 2         │ dim=120, 4 blocks, 6 heads  │       │   │
-│  │    + SimpleIllumAtt     │                             │       │   │
-│  └─────────────────────────┘                             │       │   │
-│       │ ─────────────────────────────────────────┐       │       │   │
-│       ▼ (downsample 2×)                          │       │       │   │
-│  ┌─────────────────────────┐                     │       │       │   │
-│  │    RSTB Stage 3         │ dim=240, 4 blocks   │       │       │   │
-│  │ (Bottleneck)            │                     │       │       │   │
-│  └─────────────────────────┘                     │       │       │   │
-│       │                                          │       │       │   │
-│  ═════╪═════════════════ DECODER ════════════════╪═══════╪═══    │   │
-│       │                                          │       │       │   │
-│       ▼ (upsample 2×)                            │       │       │   │
-│  ┌─────────────────────────┐                     │       │       │   │
-│  │   FeatureFusion         │ ◄───────────────────┘       │       │   │
-│  │   + RSTB Stage 2'       │ Skip connection             │       │   │
-│  └─────────────────────────┘                             │       │   │
-│       │                                                  │       │   │
-│       ▼ (upsample 2×)                                    │       │   │
-│  ┌─────────────────────────┐                             │       │   │
-│  │   FeatureFusion         │ ◄───────────────────────────┘       │   │
-│  │   + RSTB Stage 1'       │ Skip connection                     │   │
-│  └─────────────────────────┘                                     │   │
-│       │                                                          │   │
-│  ═════╪═════════════════ OUTPUT ═════════════════════════════    │   │
-│       │                                                          │   │
-│       ▼                                                          │   │
-│  ┌─────────────────────────┐                                    │   │
-│  │   conv_after + conv_last│ → (B, 3, H, W)                     │   │
-│  └─────────────────────────┘                                    │   │
-│       │                                                          │   │
-│       ▼                                                          │   │
-│       + ◄────────────────────────────────────────────────────────┘   │
+│       ▼                                                              │
+│  ┌─────────────────────────┐                                         │
+│  │    conv_first (3×3)     │ → Shallow features (B, 60, H, W)        │
+│  └─────────────────────────┘                                         │
+│       │                                                              │
+│  ═════╪═════════════════ ENCODER ═══════════════════════════         │
+│       │                                                              │
+│       ▼                                                              │
+│  ┌─────────────────────────┐                                         │
+│  │    RSTB Stage 1         │ dim=60, 4 blocks, 6 heads              │
+│  └─────────────────────────┘                                         │
+│       │ ─────────────────────────────────────────────────┐            │
+│       ▼ (downsample 2×)                                  │            │
+│  ┌─────────────────────────┐                             │            │
+│  │    RSTB Stage 2         │ dim=120, 4 blocks, 6 heads  │            │
+│  └─────────────────────────┘                             │            │
+│       │ ─────────────────────────────────────────┐       │            │
+│       ▼ (downsample 2×)                          │       │            │
+│  ┌─────────────────────────┐                     │       │            │
+│  │    RSTB Stage 3         │ dim=240, 4 blocks   │       │            │
+│  │ (Bottleneck)            │                     │       │            │
+│  └─────────────────────────┘                     │       │            │
+│       │                                          │       │            │
+│  ═════╪═════════════════ DECODER ════════════════╪═══════╪═══         │
+│       │                                          │       │            │
+│       ▼ (upsample 2×)                            │       │            │
+│  ┌─────────────────────────┐                     │       │            │
+│  │   FeatureFusion         │ ◄───────────────────┘       │            │
+│  │   + RSTB Stage 2'       │ Skip connection             │            │
+│  └─────────────────────────┘                             │            │
+│       │                                                  │            │
+│       ▼ (upsample 2×)                                    │            │
+│  ┌─────────────────────────┐                             │            │
+│  │   FeatureFusion         │ ◄───────────────────────────┘            │
+│  │   + RSTB Stage 1'       │ Skip connection                          │
+│  └─────────────────────────┘                                         │
+│       │                                                              │
+│  ═════╪═════════════════ OUTPUT ═════════════════════════════         │
+│       │                                                              │
+│       ▼                                                              │
+│  ┌─────────────────────────┐                                         │
+│  │   conv_after + conv_last│ → (B, 3, H, W)                          │
+│  └─────────────────────────┘                                         │
+│       │                                                              │
+│       ▼                                                              │
+│       + ◄──────────────────────────────────────────────────          │
 │  (Residual: Output = conv_last + Input)                              │
 │                                                                      │
 │  Output (B, 3, H, W)                                                 │
@@ -90,23 +80,18 @@ Detailed technical documentation for the simplified Swin-LLIE model.
 
 ## Component Details
 
-### 1. IlluminationEstimator
+### 1. Shallow Feature Extraction
 
-**Purpose**: Estimate which regions are dark (need enhancement) vs bright (need protection).
+**Purpose**: Convert input image to feature representation. # Simple 3-layer CNN
+self.net = nn.Sequential(
+nn.Conv2d(in_channels, hidden_dim, 3, padding=1),
+nn.ReLU(inplace=True),
+nn.Conv2d(hidden_dim, hidden_dim, 3, padding=1),
+nn.ReLU(inplace=True),
+nn.Conv2d(hidden_dim, 1, 3, padding=1),
+nn.Sigmoid()
+)
 
-```python
-class IlluminationEstimator(nn.Module):
-    def __init__(self, in_channels=3, hidden_dim=32):
-        # Simple 3-layer CNN
-        self.net = nn.Sequential(
-            nn.Conv2d(in_channels, hidden_dim, 3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(hidden_dim, hidden_dim, 3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(hidden_dim, 1, 3, padding=1),
-            nn.Sigmoid()
-        )
-    
     def forward(self, x):
         # Combine rough (max RGB) + refined (learned)
         rough = torch.max(x, dim=1, keepdim=True)[0]
@@ -115,7 +100,8 @@ class IlluminationEstimator(nn.Module):
         dark_mask = 1.0 - illum_map
         bright_mask = clamp((illum_map - 0.6) / 0.4)
         return illum_map, dark_mask, bright_mask
-```
+
+````
 
 **Outputs**:
 - `illum_map`: (B, 1, H, W) - brightness level (0=dark, 1=bright)
@@ -139,33 +125,33 @@ class SimpleIllumAttention(nn.Module):
             nn.Conv2d(dim // reduction, dim, 1),
             nn.Sigmoid()
         )
-        
+
         # Spatial modulation
         self.spatial_mod = nn.Sequential(
             nn.Conv2d(dim + 1, dim, 3, padding=1),  # +1 for dark_mask
             nn.ReLU(inplace=True),
             nn.Conv2d(dim, dim, 3, padding=1)
         )
-        
+
         # Learnable blend (starts at 0)
         self.gamma = nn.Parameter(torch.zeros(1))
-    
+
     def forward(self, features, dark_mask, bright_mask=None):
         # Channel attention
         ch_att = self.channel_att(features)
-        
+
         # Spatial modulation with dark mask
         combined = torch.cat([features, dark_mask], dim=1)
         spatial = self.spatial_mod(combined)
         enhanced = spatial * ch_att * (0.5 + 0.5 * dark_mask)
-        
+
         # Protect bright regions
         if bright_mask is not None:
             enhanced = enhanced * (1.0 - 0.7 * bright_mask)
-        
+
         # Residual with learnable weight
         return features + self.gamma * enhanced
-```
+````
 
 **Key insight**: `gamma` starts at 0, so initially the network just passes features through. During training, it learns how much enhancement to apply.
 
@@ -179,7 +165,7 @@ class SimpleIllumAttention(nn.Module):
 class WindowAttention(nn.Module):
     """
     Complexity: O(N × window_size²) instead of O(N²)
-    
+
     For 128×128 image with window_size=8:
     - Full attention: 128² × 128² = 268M operations
     - Window attention: 128² × 8² = 1M operations (268× faster!)
@@ -286,21 +272,21 @@ out = conv_last(conv_after(dec1) + shallow) + x  # (1, 3, 128, 128)
 
 ### Model Size Variants
 
-| Variant | embed_dim | depths | num_heads | Parameters |
-|---------|-----------|--------|-----------|------------|
-| Tiny    | 48        | [2,2,2]| [4,4,4]   | ~2M        |
-| Small   | 60        | [4,4,4]| [6,6,6]   | ~6.5M      |
-| Base    | 96        | [6,6,6]| [8,8,8]   | ~15M       |
-| Large   | 128       | [8,8,8]| [12,12,12]| ~30M       |
+| Variant | embed_dim | depths  | num_heads  | Parameters |
+| ------- | --------- | ------- | ---------- | ---------- |
+| Tiny    | 48        | [2,2,2] | [4,4,4]    | ~2M        |
+| Small   | 60        | [4,4,4] | [6,6,6]    | ~6.5M      |
+| Base    | 96        | [6,6,6] | [8,8,8]    | ~15M       |
+| Large   | 128       | [8,8,8] | [12,12,12] | ~30M       |
 
 ### Key Parameters
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `window_size` | 8 | Attention window size |
-| `mlp_ratio` | 2.0 | MLP hidden dim = dim × mlp_ratio |
-| `drop_path_rate` | 0.1 | Stochastic depth rate |
-| `use_igam` | True | Enable illumination attention |
+| Parameter        | Default | Description                      |
+| ---------------- | ------- | -------------------------------- |
+| `window_size`    | 8       | Attention window size            |
+| `mlp_ratio`      | 2.0     | MLP hidden dim = dim × mlp_ratio |
+| `drop_path_rate` | 0.1     | Stochastic depth rate            |
+| `use_igam`       | True    | Enable illumination attention    |
 
 ---
 
@@ -308,8 +294,8 @@ out = conv_last(conv_after(dec1) + shallow) + x  # (1, 3, 128, 128)
 
 ### Training (batch_size=4, patch_size=96)
 
-| GPU VRAM | Recommended Config |
-|----------|-------------------|
+| GPU VRAM | Recommended Config    |
+| -------- | --------------------- |
 | 4 GB     | batch=1, embed_dim=48 |
 | 8 GB     | batch=4, embed_dim=60 |
 | 12 GB    | batch=8, embed_dim=96 |
@@ -324,11 +310,11 @@ out = conv_last(conv_after(dec1) + shallow) + x  # (1, 3, 128, 128)
 
 ## Differences from Original SwinIR
 
-| Aspect | Original SwinIR | Swin-LLIE |
-|--------|-----------------|-----------|
-| Task | Super-resolution | Low-light enhancement |
-| Attention | Window only | Window + Illumination-guided |
-| Architecture | Single-scale | U-Net encoder-decoder |
-| Normalization | LayerNorm only | LayerNorm + InstanceNorm in attention |
-| Loss | L1 | Hybrid (L1+VGG+Color+Edge+Exposure) |
-| Parameters | ~12M (large) | ~6.5M (efficient) |
+| Aspect        | Original SwinIR  | Swin-LLIE                             |
+| ------------- | ---------------- | ------------------------------------- |
+| Task          | Super-resolution | Low-light enhancement                 |
+| Attention     | Window only      | Window + Illumination-guided          |
+| Architecture  | Single-scale     | U-Net encoder-decoder                 |
+| Normalization | LayerNorm only   | LayerNorm + InstanceNorm in attention |
+| Loss          | L1               | Hybrid (L1+VGG+Color+Edge+Exposure)   |
+| Parameters    | ~12M (large)     | ~6.5M (efficient)                     |

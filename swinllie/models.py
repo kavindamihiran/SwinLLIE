@@ -1,6 +1,6 @@
 # -----------------------------------------------------------------------------------
-# Swin-LLIE: Simplified Low-Light Image Enhancement
-# Clean, beginner-friendly architecture with simple attention mechanism
+# SwinIR: Pure Swin Transformer for Low-Light Image Enhancement
+# Clean implementation without additional attention mechanisms
 # -----------------------------------------------------------------------------------
 
 import math
@@ -48,164 +48,6 @@ def window_reverse(windows, window_size, H, W):
     x = windows.view(B, H // window_size, W // window_size, window_size, window_size, -1)
     x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, H, W, -1)
     return x
-
-
-# =============================================================================
-# Illumination Estimation Module (SIMPLIFIED)
-# =============================================================================
-
-class IlluminationEstimator(nn.Module):
-    """
-    Simple CNN to estimate how dark each region is.
-    
-    Input: RGB image (B, 3, H, W)
-    Output: 
-        - illum_map: brightness of each pixel (0=dark, 1=bright)
-        - dark_mask: inverse (1=dark, 0=bright) - where to enhance
-    
-    Why we need this:
-        - Dark regions need more enhancement
-        - Bright regions should stay the same (avoid overexposure)
-    """
-    
-    def __init__(self, in_channels=3, hidden_dim=32):
-        super().__init__()
-        
-        # Simple 3-layer CNN
-        self.net = nn.Sequential(
-            nn.Conv2d(in_channels, hidden_dim, 3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(hidden_dim, hidden_dim, 3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(hidden_dim, 1, 3, padding=1),
-            nn.Sigmoid()  # Output in [0, 1]
-        )
-        
-        self._init_weights()
-    
-    def _init_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out')
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
-    
-    def forward(self, x):
-        """
-        Args:
-            x: Input image (B, 3, H, W) in [0, 1]
-        
-        Returns:
-            illum_map: (B, 1, H, W) brightness level
-            dark_mask: (B, 1, H, W) darkness level (for attention)
-            bright_mask: (B, 1, H, W) bright regions (to protect)
-        """
-        # Get rough brightness from max RGB channel
-        rough_bright = torch.max(x, dim=1, keepdim=True)[0]
-        
-        # Refine with learned network
-        refined = self.net(x)
-        
-        # Combine: 40% rough + 60% learned
-        illum_map = 0.4 * rough_bright + 0.6 * refined
-        
-        # Dark mask: invert (dark=1, bright=0)
-        dark_mask = 1.0 - illum_map
-        
-        # Bright mask: regions above threshold need protection
-        bright_mask = torch.clamp((illum_map - 0.6) / 0.4, 0.0, 1.0)
-        
-        return illum_map, dark_mask, bright_mask
-
-
-# =============================================================================
-# Simple Illumination-Guided Attention (SIMPLIFIED)
-# =============================================================================
-
-class SimpleIllumAttention(nn.Module):
-    """
-    Simple attention that enhances dark regions more than bright regions.
-    
-    How it works:
-        1. Channel attention: Learn which channels are important
-        2. Spatial modulation: Apply more enhancement where dark_mask is high
-        3. Residual: Blend with original features
-    
-    This replaces the complex multi-branch attention with a clean design.
-    """
-    
-    def __init__(self, dim, reduction=4):
-        super().__init__()
-        self.dim = dim
-        
-        # Channel attention (Squeeze-and-Excitation style)
-        self.channel_att = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(dim, dim // reduction, 1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(dim // reduction, dim, 1),
-            nn.Sigmoid()
-        )
-        
-        # Spatial modulation: combine features with dark mask
-        self.spatial_mod = nn.Sequential(
-            nn.Conv2d(dim + 1, dim, 3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(dim, dim, 3, padding=1)
-        )
-        
-        # Learnable blend weight (starts at 0 = use original)
-        self.gamma = nn.Parameter(torch.zeros(1))
-        
-        self._init_weights()
-    
-    def _init_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out')
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
-    
-    def forward(self, features, dark_mask, bright_mask=None):
-        """
-        Args:
-            features: (B, C, H, W) feature tensor
-            dark_mask: (B, 1, H, W) where to enhance (1=dark)
-            bright_mask: (B, 1, H, W) where to protect (1=bright)
-        
-        Returns:
-            modulated: (B, C, H, W) enhanced features
-        """
-        B, C, H, W = features.shape
-        
-        # Resize mask to match features
-        if dark_mask.shape[2:] != (H, W):
-            dark_mask = F.interpolate(dark_mask, size=(H, W), mode='bilinear', align_corners=False)
-        
-        # 1. Channel attention
-        ch_att = self.channel_att(features)  # (B, C, 1, 1)
-        
-        # 2. Spatial modulation guided by dark mask
-        combined = torch.cat([features, dark_mask], dim=1)  # (B, C+1, H, W)
-        spatial = self.spatial_mod(combined)  # (B, C, H, W)
-        
-        # 3. Apply channel attention to spatial features
-        enhanced = spatial * ch_att
-        
-        # 4. Weight by dark mask (more enhancement in dark regions)
-        enhanced = enhanced * (0.5 + 0.5 * dark_mask)
-        
-        # 5. Protect bright regions if mask provided
-        if bright_mask is not None:
-            if bright_mask.shape[2:] != (H, W):
-                bright_mask = F.interpolate(bright_mask, size=(H, W), mode='bilinear', align_corners=False)
-            # Reduce enhancement in bright regions
-            enhanced = enhanced * (1.0 - 0.7 * bright_mask)
-        
-        # 6. Residual blend with learnable weight
-        output = features + self.gamma * enhanced
-        
-        return output
 
 
 # =============================================================================
@@ -476,24 +318,23 @@ class PatchUnEmbed(nn.Module):
 
 
 # =============================================================================
-# RSTB with Illumination Attention (SIMPLIFIED)
+# RSTB (Residual Swin Transformer Block)
 # =============================================================================
 
 class RSTB(nn.Module):
     """
-    Residual Swin Transformer Block with optional illumination attention.
+    Residual Swin Transformer Block - Pure SwinIR implementation.
     
-    Structure: Input -> Swin Blocks -> Conv -> (Illum Attention) -> + Input
+    Structure: Input -> Swin Blocks -> Conv -> + Input
     """
     
     def __init__(self, dim, input_resolution, depth, num_heads, window_size,
                  mlp_ratio=4., qkv_bias=True, drop=0., attn_drop=0.,
                  drop_path=0., norm_layer=nn.LayerNorm, use_checkpoint=False,
-                 img_size=224, patch_size=1, use_illum_att=True):
+                 img_size=224, patch_size=1):
         super().__init__()
         
         self.dim = dim
-        self.use_illum_att = use_illum_att
 
         # Swin Transformer blocks
         self.residual_group = BasicLayer(
@@ -517,27 +358,18 @@ class RSTB(nn.Module):
                                        embed_dim=dim, norm_layer=None)
         self.patch_unembed = PatchUnEmbed(embed_dim=dim)
 
-        # Illumination attention (optional)
-        if use_illum_att:
-            self.illum_att = SimpleIllumAttention(dim)
-
-    def forward(self, x, x_size, dark_mask=None, bright_mask=None):
+    def forward(self, x, x_size):
         # Swin processing
         residual = self.residual_group(x, x_size)
         residual = self.patch_unembed(residual, x_size)
         residual = self.conv(residual)
-        
-        # Apply illumination attention if enabled and mask provided
-        if self.use_illum_att and dark_mask is not None:
-            residual = self.illum_att(residual, dark_mask, bright_mask)
-        
         residual = self.patch_embed.forward(residual)
         
         return residual + x
 
 
 # =============================================================================
-# Cross-Stage Feature Fusion (SIMPLIFIED)
+# Simple Feature Fusion
 # =============================================================================
 
 class FeatureFusion(nn.Module):
@@ -550,11 +382,6 @@ class FeatureFusion(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv2d(dim, dim, 3, 1, 1)
         )
-        self.gate = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(dim * 2, dim, 1),
-            nn.Sigmoid()
-        )
     
     def forward(self, enc_feat, dec_feat):
         # Match spatial sizes
@@ -562,24 +389,23 @@ class FeatureFusion(nn.Module):
             enc_feat = F.interpolate(enc_feat, size=dec_feat.shape[2:], mode='bilinear', align_corners=False)
         
         concat = torch.cat([enc_feat, dec_feat], dim=1)
-        gate = self.gate(concat)
         fused = self.conv(concat)
         
-        return gate * enc_feat + (1 - gate) * dec_feat + fused
+        return enc_feat + dec_feat + fused
 
 
 # =============================================================================
-# MAIN MODEL: SwinLLIE (SIMPLIFIED)
+# MAIN MODEL: SwinIR for Low-Light Enhancement
 # =============================================================================
 
 class SwinLLIE(nn.Module):
     """
-    Swin-LLIE: Simplified Low-Light Image Enhancement
+    SwinIR: Pure Swin Transformer for Low-Light Image Enhancement
     
     Architecture:
-        1. Estimate illumination (which regions are dark)
-        2. Extract features with Swin Transformer
-        3. Apply more enhancement to dark regions
+        1. Extract shallow features
+        2. Process with multi-scale Swin Transformer blocks
+        3. Decoder with skip connections
         4. Reconstruct enhanced image
     
     Args:
@@ -588,7 +414,6 @@ class SwinLLIE(nn.Module):
         depths: Blocks per stage (default: [4, 4, 4])
         num_heads: Attention heads per stage (default: [6, 6, 6])
         window_size: Attention window size (default: 8)
-        use_igam: Use illumination-guided attention (default: True)
     """
     
     def __init__(self, img_size=128, patch_size=1, in_chans=3,
@@ -596,14 +421,13 @@ class SwinLLIE(nn.Module):
                  window_size=8, mlp_ratio=2., qkv_bias=True,
                  drop_rate=0., attn_drop_rate=0., drop_path_rate=0.1,
                  norm_layer=nn.LayerNorm, use_checkpoint=False,
-                 img_range=1., resi_connection='1conv', use_igam=True, **kwargs):
+                 img_range=1., resi_connection='1conv', **kwargs):
         super().__init__()
         
         self.img_range = img_range
         self.window_size = window_size
         self.num_stages = len(depths)
         self.embed_dim = embed_dim
-        self.use_igam = use_igam
         
         # Image normalization
         if in_chans == 3:
@@ -611,10 +435,7 @@ class SwinLLIE(nn.Module):
         else:
             self.mean = torch.zeros(1, 1, 1, 1)
         
-        # Step 1: Illumination Estimation
-        self.illum_estimator = IlluminationEstimator(in_channels=in_chans)
-        
-        # Step 2: Shallow Feature Extraction
+        # Shallow Feature Extraction
         self.conv_first = nn.Conv2d(in_chans, embed_dim, 3, 1, 1)
         
         # Patch embedding
@@ -626,7 +447,7 @@ class SwinLLIE(nn.Module):
         # Stochastic depth
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]
         
-        # Step 3: Encoder
+        # Encoder
         self.encoder_layers = nn.ModuleList()
         self.downsample_layers = nn.ModuleList()
         
@@ -647,15 +468,14 @@ class SwinLLIE(nn.Module):
                 norm_layer=norm_layer,
                 use_checkpoint=use_checkpoint,
                 img_size=img_size // (2 ** i),
-                patch_size=patch_size,
-                use_illum_att=use_igam)
+                patch_size=patch_size)
             self.encoder_layers.append(layer)
             
             if i < self.num_stages - 1:
                 down = nn.Conv2d(dim, dim * 2, kernel_size=2, stride=2)
                 self.downsample_layers.append(down)
         
-        # Step 4: Decoder with skip connections
+        # Decoder with skip connections
         self.decoder_layers = nn.ModuleList()
         self.upsample_layers = nn.ModuleList()
         self.fusion_layers = nn.ModuleList()
@@ -686,11 +506,10 @@ class SwinLLIE(nn.Module):
                 norm_layer=norm_layer,
                 use_checkpoint=use_checkpoint,
                 img_size=img_size // (2 ** i),
-                patch_size=patch_size,
-                use_illum_att=use_igam)
+                patch_size=patch_size)
             self.decoder_layers.append(layer)
         
-        # Step 5: Output
+        # Output
         self.norm = norm_layer(embed_dim)
         self.patch_unembed = PatchUnEmbed(embed_dim=embed_dim)
         self.conv_after = nn.Conv2d(embed_dim, embed_dim, 3, 1, 1)
@@ -737,13 +556,10 @@ class SwinLLIE(nn.Module):
         self.mean = self.mean.type_as(x)
         x = (x - self.mean) * self.img_range
         
-        # Step 1: Estimate illumination
-        illum, dark_mask, bright_mask = self.illum_estimator((x / self.img_range) + self.mean)
-        
-        # Step 2: Shallow features
+        # Shallow features
         x_shallow = self.conv_first(x)
         
-        # Step 3: Encoder
+        # Encoder
         encoder_features = []
         x_enc = x_shallow
         
@@ -751,14 +567,14 @@ class SwinLLIE(nn.Module):
             h, w = x_enc.shape[2:]
             x_flat = self.patch_embed.forward(x_enc) if i == 0 else x_enc.flatten(2).transpose(1, 2)
             x_flat = self.pos_drop(x_flat)
-            x_flat = self.encoder_layers[i](x_flat, (h, w), dark_mask, bright_mask)
+            x_flat = self.encoder_layers[i](x_flat, (h, w))
             x_enc = x_flat.transpose(1, 2).view(-1, x_flat.shape[-1], h, w)
             encoder_features.append(x_enc)
             
             if i < self.num_stages - 1:
                 x_enc = self.downsample_layers[i](x_enc)
         
-        # Step 4: Decoder
+        # Decoder
         x_dec = encoder_features[-1]
         
         for i, enc_idx in enumerate(range(self.num_stages - 2, -1, -1)):
@@ -767,10 +583,10 @@ class SwinLLIE(nn.Module):
             
             h, w = x_dec.shape[2:]
             x_flat = x_dec.flatten(2).transpose(1, 2)
-            x_flat = self.decoder_layers[i](x_flat, (h, w), dark_mask, bright_mask)
+            x_flat = self.decoder_layers[i](x_flat, (h, w))
             x_dec = x_flat.transpose(1, 2).view(-1, x_flat.shape[-1], h, w)
         
-        # Step 5: Output
+        # Output
         x_out = self.conv_after(x_dec) + x_shallow
         x_out = self.conv_last(x_out)
         x_out = x_out + x  # Residual
@@ -780,19 +596,7 @@ class SwinLLIE(nn.Module):
         
         return x_out[:, :, :H, :W]
     
-    def get_illumination_map(self, x):
-        """Get illumination maps for visualization."""
-        return self.illum_estimator(x)
 
-
-# =============================================================================
-# Backward Compatibility Aliases
-# =============================================================================
-
-# Keep old class names working
-IlluminationEstimationModule = IlluminationEstimator
-IlluminationGuidedAttention = SimpleIllumAttention
-RSTB_IGAM = RSTB
 
 
 # =============================================================================
@@ -801,7 +605,7 @@ RSTB_IGAM = RSTB
 
 if __name__ == '__main__':
     print("=" * 60)
-    print("Testing Simplified Swin-LLIE Model")
+    print("Testing Pure SwinIR Model")
     print("=" * 60)
     
     # Create model
@@ -811,8 +615,7 @@ if __name__ == '__main__':
         depths=[4, 4, 4],
         num_heads=[6, 6, 6],
         window_size=8,
-        mlp_ratio=2,
-        use_igam=True
+        mlp_ratio=2
     )
     
     print(f"\n✓ Model created successfully!")
@@ -827,12 +630,6 @@ if __name__ == '__main__':
     
     print(f"✓ Output shape: {y.shape}")
     assert y.shape == x.shape
-    
-    # Test illumination extraction
-    illum, dark, bright = model.get_illumination_map(x)
-    print(f"\n✓ Illumination map: {illum.shape}")
-    print(f"✓ Dark mask: {dark.shape}")
-    print(f"✓ Bright mask: {bright.shape}")
     
     print("\n" + "=" * 60)
     print("All tests passed! Model is ready.")

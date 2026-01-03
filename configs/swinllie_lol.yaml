@@ -1,4 +1,4 @@
-# Swin-LLIE Training Configuration
+# SwinIR Training Configuration
 # Configuration file for training on LOL Dataset
 
 # =============================================================================
@@ -20,7 +20,6 @@ model:
   drop_path_rate: 0.1
   use_checkpoint: false
   resi_connection: "1conv"
-  use_igam: true # Enable Illumination-Guided Attention
 
 # =============================================================================
 # Dataset Configuration
@@ -72,7 +71,7 @@ loss:
   lambda_color: 0.5
   lambda_smooth: 0.01
   lambda_edge: 1.0
-  lambda_exposure: 1.0  # Prevents overexposure in bright regions
+  lambda_exposure: 1.0 # Prevents overexposure in bright regions
   use_ssim: false
   lambda_ssim: 0.1
 

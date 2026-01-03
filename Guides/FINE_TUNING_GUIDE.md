@@ -1,10 +1,11 @@
-# Fine-Tuning Guide for Swin-LLIE
+# Fine-Tuning Guide for SwinIR
 
-A practical guide to fine-tuning the simplified Swin-LLIE model on custom datasets.
+A practical guide to fine-tuning the pure SwinIR model on custom low-light datasets.
 
 ---
 
 ## Table of Contents
+
 1. [Quick Start Fine-Tuning](#quick-start-fine-tuning)
 2. [Preparing Your Dataset](#preparing-your-dataset)
 3. [Training Configuration](#training-configuration)
@@ -26,8 +27,7 @@ model = SwinLLIE(
     embed_dim=60,
     depths=[4, 4, 4],
     num_heads=[6, 6, 6],
-    window_size=8,
-    use_igam=True
+    window_size=8
 )
 
 # Load pretrained weights
@@ -41,8 +41,8 @@ print(f"Loaded from epoch {checkpoint.get('epoch', 'unknown')}")
 ```yaml
 # configs/finetune_custom.yaml
 training:
-  learning_rate: 0.00002  # 10x LOWER than training from scratch!
-  epochs: 50              # Fewer epochs needed
+  learning_rate: 0.00002 # 10x LOWER than training from scratch!
+  epochs: 50 # Fewer epochs needed
   batch_size: 4
 
 dataset:
@@ -83,21 +83,21 @@ datasets/YourData/
 
 ### Image Requirements
 
-| Aspect | Requirement |
-|--------|-------------|
-| Format | PNG, JPG, BMP |
-| Mode | RGB (3 channels) |
-| Size | Any (auto-cropped to patches) |
-| Range | [0, 255] or [0, 1] |
-| Pairs | Same filename in low/ and high/ |
+| Aspect | Requirement                     |
+| ------ | ------------------------------- |
+| Format | PNG, JPG, BMP                   |
+| Mode   | RGB (3 channels)                |
+| Size   | Any (auto-cropped to patches)   |
+| Range  | [0, 255] or [0, 1]              |
+| Pairs  | Same filename in low/ and high/ |
 
 ### Dataset Size Guidelines
 
-| Size | Strategy |
-|------|----------|
-| < 100 pairs | Fine-tune, heavy augmentation |
+| Size          | Strategy                         |
+| ------------- | -------------------------------- |
+| < 100 pairs   | Fine-tune, heavy augmentation    |
 | 100-500 pairs | Fine-tune, moderate augmentation |
-| > 500 pairs | Can train from scratch |
+| > 500 pairs   | Can train from scratch           |
 
 ---
 
@@ -138,7 +138,7 @@ lambda_exposure: 1.0   # Increase exposure weight
 ### Batch Size vs GPU Memory
 
 | GPU VRAM | Batch Size | Patch Size |
-|----------|------------|------------|
+| -------- | ---------- | ---------- |
 | 4 GB     | 1-2        | 64         |
 | 8 GB     | 4          | 96         |
 | 12 GB    | 8          | 128        |
@@ -198,13 +198,13 @@ for epoch in range(EPOCHS):
 param_groups = [
     # Frozen
     {'params': model.illum_estimator.parameters(), 'lr': 0},
-    
+
     # Low LR (preserve pretrained)
     {'params': model.encoder_layers.parameters(), 'lr': 1e-5},
-    
+
     # Normal LR (adapt to new data)
     {'params': model.decoder_layers.parameters(), 'lr': 2e-5},
-    
+
     # Higher LR (task-specific)
     {'params': model.conv_last.parameters(), 'lr': 5e-5},
 ]
@@ -222,22 +222,22 @@ import random
 
 def augment_pair(low, high):
     """Apply same transforms to both images."""
-    
+
     # Random horizontal flip
     if random.random() > 0.5:
         low = TF.hflip(low)
         high = TF.hflip(high)
-    
+
     # Random vertical flip
     if random.random() > 0.5:
         low = TF.vflip(low)
         high = TF.vflip(high)
-    
+
     # Random 90° rotation
     angle = random.choice([0, 90, 180, 270])
     low = TF.rotate(low, angle)
     high = TF.rotate(high, angle)
-    
+
     return low, high
 
 # DON'T use:
@@ -252,13 +252,13 @@ def augment_pair(low, high):
 
 ### Common Issues
 
-| Problem | Cause | Solution |
-|---------|-------|----------|
-| Loss explodes to NaN | LR too high | Lower to 1e-5 |
-| No improvement | LR too low | Increase to 5e-5 |
-| Forgetting pretrained | LR too high | Freeze early layers |
-| Overfitting | Dataset too small | More augmentation |
-| Blurry outputs | VGG/edge too low | Increase weights |
+| Problem               | Cause             | Solution            |
+| --------------------- | ----------------- | ------------------- |
+| Loss explodes to NaN  | LR too high       | Lower to 1e-5       |
+| No improvement        | LR too low        | Increase to 5e-5    |
+| Forgetting pretrained | LR too high       | Freeze early layers |
+| Overfitting           | Dataset too small | More augmentation   |
+| Blurry outputs        | VGG/edge too low  | Increase weights    |
 
 ### Monitoring Tips
 
@@ -275,11 +275,11 @@ for name, param in model.named_parameters():
 
 ### Validation Metrics
 
-| Metric | Good Value | Meaning |
-|--------|------------|---------|
-| PSNR | > 20 dB | Pixel accuracy |
-| SSIM | > 0.8 | Structural similarity |
-| LPIPS | < 0.3 | Perceptual quality |
+| Metric | Good Value | Meaning               |
+| ------ | ---------- | --------------------- |
+| PSNR   | > 20 dB    | Pixel accuracy        |
+| SSIM   | > 0.8      | Structural similarity |
+| LPIPS  | < 0.3      | Perceptual quality    |
 
 ---
 
@@ -303,7 +303,7 @@ dataset:
 training:
   batch_size: 4
   epochs: 50
-  learning_rate: 0.00002  # Fine-tuning LR
+  learning_rate: 0.00002 # Fine-tuning LR
   weight_decay: 0.0001
   use_amp: true
   grad_clip: 1.0
@@ -329,14 +329,14 @@ python train.py --config configs/finetune_indoor.yaml
 
 ## Quick Reference
 
-| Setting | From Scratch | Fine-Tuning |
-|---------|--------------|-------------|
-| Learning Rate | 2e-4 | 2e-5 |
-| Epochs | 100+ | 30-50 |
-| Batch Size | 4-8 | 2-4 |
-| Warmup | 5 epochs | 2 epochs |
-| Early Layers | Train | Freeze/low LR |
-| Late Layers | Train | Train |
+| Setting       | From Scratch | Fine-Tuning   |
+| ------------- | ------------ | ------------- |
+| Learning Rate | 2e-4         | 2e-5          |
+| Epochs        | 100+         | 30-50         |
+| Batch Size    | 4-8          | 2-4           |
+| Warmup        | 5 epochs     | 2 epochs      |
+| Early Layers  | Train        | Freeze/low LR |
+| Late Layers   | Train        | Train         |
 
 ---
 

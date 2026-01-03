@@ -105,8 +105,7 @@ if __name__ == '__main__':
         attn_drop_rate=model_cfg.get('attn_drop_rate', 0.0),
         drop_path_rate=model_cfg.get('drop_path_rate', 0.1),
         use_checkpoint=model_cfg.get('use_checkpoint', False),
-        resi_connection=model_cfg.get('resi_connection', '1conv'),
-        use_igam=model_cfg.get('use_igam', True)
+        resi_connection=model_cfg.get('resi_connection', '1conv')
     ).to(device)
     
     # Loss with config parameters
