@@ -80,22 +80,13 @@ Dark images have: low brightness, washed colors, noise, blurry edges.
 ### Our Solution
 
 ```
-Input → IlluminationEstimator → Swin Encoder → Swin Decoder → Output
-              ↓                      ↓              ↓
-         dark_mask            Apply more      Skip connections
-         (where to            enhancement     preserve details
-          enhance)            in dark areas
+Input → Conv First → Swin Encoder → Swin Decoder → Output
+                          ↓              ↓
+                    Multi-scale     Skip connections
+                    processing      preserve details
 ```
 
-### Key Innovation: SimpleIllumAttention
-
-```python
-# Adapts enhancement based on darkness level
-output = features + gamma * (enhanced * dark_mask)
-#        ↑          ↑           ↑          ↑
-#    original   learnable   enhanced   where to
-#    features    weight     features    apply
-```
+**Key**: Pure Swin Transformer architecture with hierarchical encoding/decoding.
 
 **Read more**: [📖 THEORY_GUIDE.md](Guides/THEORY_GUIDE.md)
 
@@ -103,14 +94,14 @@ output = features + gamma * (enhanced * dark_mask)
 
 ## ⚙️ Model Architecture
 
-| Component               | Description                                    |
-| ----------------------- | ---------------------------------------------- |
-| `IlluminationEstimator` | 3-layer CNN estimates dark regions             |
-| `SimpleIllumAttention`  | Channel + Spatial attention guided by darkness |
-| `RSTB`                  | Residual Swin Transformer Block                |
-| `SwinLLIE`              | Full U-Net with 3 encoder + decoder stages     |
+| Component         | Description                                |
+| ----------------- | ------------------------------------------ |
+| `WindowAttention` | Efficient window-based self-attention      |
+| `RSTB`            | Residual Swin Transformer Block            |
+| `FeatureFusion`   | Skip connection fusion for multi-scale     |
+| `SwinLLIE`        | Full U-Net with 3 encoder + decoder stages |
 
-**Parameters**: 6,488,071 (~6.5M)
+**Parameters**: 4,702,503 (~4.7M)
 
 ---
 
@@ -138,7 +129,6 @@ model:
   depths: [4, 4, 4]
   num_heads: [6, 6, 6]
   window_size: 8
-  use_igam: true # Enable illumination attention
 
 training:
   batch_size: 4
@@ -182,7 +172,7 @@ loss:
 
 ```bibtex
 @article{swinllie2025,
-  title={Swin-LLIE: Illumination-Aware Swin Transformer for Low-Light Image Enhancement},
+  title={SwinLLIE: Swin Transformer for Low-Light Image Enhancement},
   author={Group 10},
   year={2025}
 }
@@ -192,4 +182,4 @@ loss:
 
 - [SwinIR](https://github.com/JingyunLiang/SwinIR) - Base architecture
 - [LOL Dataset](https://daooshee.github.io/BMVC2018website/) - Training data
-- Retinex theory - Illumination estimation concept
+- Window-based self-attention for efficient image processing

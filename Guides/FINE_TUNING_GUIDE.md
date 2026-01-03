@@ -153,10 +153,6 @@ lambda_exposure: 1.0   # Increase exposure weight
 Freeze early layers, train only later layers:
 
 ```python
-# Freeze illumination estimator (preserve learned brightness detection)
-for param in model.illum_estimator.parameters():
-    param.requires_grad = False
-
 # Freeze encoder (preserve feature extraction)
 for param in model.encoder_layers.parameters():
     param.requires_grad = False
@@ -196,8 +192,6 @@ for epoch in range(EPOCHS):
 
 ```python
 param_groups = [
-    # Frozen
-    {'params': model.illum_estimator.parameters(), 'lr': 0},
 
     # Low LR (preserve pretrained)
     {'params': model.encoder_layers.parameters(), 'lr': 1e-5},
@@ -292,7 +286,6 @@ model:
   depths: [4, 4, 4]
   num_heads: [6, 6, 6]
   window_size: 8
-  use_igam: true
 
 dataset:
   name: "lol"

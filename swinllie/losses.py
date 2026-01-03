@@ -172,13 +172,10 @@ class EdgeLoss(nn.Module):
 
 class IlluminationSmoothnessLoss(nn.Module):
     """
-    Smoothness Loss for illumination map.
+    [DEPRECATED - Not used in pure SwinIR implementation]
     
-    Why it matters:
-        - Illumination should be smooth (no sharp changes)
-        - Prevents noisy/patchy illumination estimates
-    
-    Uses Total Variation (TV) regularization.
+    Total Variation (TV) regularization loss.
+    Originally used for smoothness regularization.
     """
     
     def __init__(self):
@@ -288,7 +285,7 @@ class HybridLoss(nn.Module):
     """
     Combined Loss for Swin-LLIE Training.
     
-    Combines 5 loss functions (reduced from 7):
+    Combines 5 loss functions:
         1. L1: Main reconstruction (weight: 1.0)
         2. VGG: Perceptual quality (weight: 0.1)
         3. Color: Color preservation (weight: 0.5)
@@ -297,11 +294,10 @@ class HybridLoss(nn.Module):
     
     Optional:
         - SSIM: Structural similarity
-        - Smoothness: For illumination map
     
     Usage:
         loss_fn = HybridLoss()
-        loss, breakdown = loss_fn(pred, target, illum_map)
+        loss, breakdown = loss_fn(pred, target)
     """
     
     def __init__(self, 

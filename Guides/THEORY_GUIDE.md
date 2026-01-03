@@ -31,10 +31,12 @@ Normal Light Image          Low Light Image
 
 ### The challenge
 
-We want to **enhance** dark regions while **preserving** bright regions:
+We want to **enhance** dark regions while **preserving** structure:
 
-- Dark areas → Brighten and reveal details
-- Bright areas → Keep as-is (avoid overexposure)
+- Brighten dark areas and reveal details
+- Maintain color fidelity
+- Avoid amplifying noise
+- Preserve natural-looking results
 
 ---
 
@@ -62,13 +64,19 @@ Image:    2D grid of pixels with spatial relationships
 Instead of looking at the entire image at once:
 
 ```
-Full Image (too expensive)     Window-based (efficient)
+Full Attention (too expensive)     Window-based (efficient)
 ┌─────────────────────┐        ┌───┬───┬───┐
 │ Every pixel         │  →     │ A │ B │ C │  Each window
 │ looks at            │        ├───┼───┼───┤  attends to
 │ every other pixel   │        │ D │ E │ F │  itself only
 └─────────────────────┘        └───┴───┴───┘
 ```
+
+**Efficiency gain:**
+
+- Full attention: 128² × 128² = 268M operations
+- Window attention (8×8): 128² × 8² = 1M operations
+- **268× faster!**
 
 ---
 
@@ -98,366 +106,268 @@ Why this works:
 
 - **Small scale**: Fine details, textures, edges
 - **Medium scale**: Objects, patterns
-- **Large scale**: Overall illumination, global structure
-
-````
-
-### Why this matters
-
-In a dark image, the illumination (L) is low. If we can:
-1. **Estimate** what L is (which parts are dark)
-2. **Boost** L in dark regions
-3. **Keep** R unchanged
-
-Then we get a properly lit image!
-
-### Our implementation
-
-```python
-class IlluminationEstimator(nn.Module):
-    """
-    Estimates which regions are dark vs bright.
-
-    Output:
-        dark_mask = 1 where dark (needs enhancement)
-        dark_mask = 0 where bright (preserve as-is)
-    """
-````
+- **Large scale**: Overall structure, global context
 
 ---
 
-## How Attention Works
+## Pure SwinIR Architecture
 
-### Self-Attention (The Key Concept)
-
-Imagine reading a sentence: "The cat sat on the mat because **it** was tired."
-
-To understand what "it" refers to, you look back at the whole sentence and find "cat" is most relevant. This is **attention**.
-
-For images, we do the same thing - each pixel "looks at" other pixels to understand context.
-
-### The Math (Simplified)
+### Complete Architecture
 
 ```
-Attention(Q, K, V) = softmax(Q × K^T / √d) × V
-
-Where:
-- Q (Query): "What am I looking for?"
-- K (Key): "What information do I have?"
-- V (Value): "What should I output?"
-- d: Dimension (for scaling)
+┌────────────────────────────────────────────────┐
+│              SwinIR for Low-Light               │
+├────────────────────────────────────────────────┤
+│  Input Image (B, 3, H, W)                       │
+│       ↓                                         │
+│  ┌──────────────┐                               │
+│  │ Conv First   │ → Initial feature extraction  │
+│  └──────────────┘                               │
+│       ↓                                         │
+│  ══════════════ ENCODER ════════════════        │
+│       ↓                                         │
+│  ┌──────────────┐                               │
+│  │ RSTB Stage 1 │ → dim=60, 4 blocks            │
+│  └──────────────┘                               │
+│       ↓ (downsample 2×)                         │
+│  ┌──────────────┐                               │
+│  │ RSTB Stage 2 │ → dim=120, 4 blocks           │
+│  └──────────────┘                               │
+│       ↓ (downsample 2×)                         │
+│  ┌──────────────┐                               │
+│  │ RSTB Stage 3 │ → dim=240, 4 blocks           │
+│  └──────────────┘ (Bottleneck)                  │
+│       ↓                                         │
+│  ══════════════ DECODER ════════════════        │
+│       ↓ (upsample 2×, skip connection)          │
+│  ┌──────────────┐                               │
+│  │ RSTB Stage 2'│ → Refine with encoder feats   │
+│  └──────────────┘                               │
+│       ↓ (upsample 2×, skip connection)          │
+│  ┌──────────────┐                               │
+│  │ RSTB Stage 1'│ → Final refinement            │
+│  └──────────────┘                               │
+│       ↓                                         │
+│  ┌──────────────┐                               │
+│  │  Conv Output │ → RGB reconstruction          │
+│  └──────────────┘                               │
+│       ↓                                         │
+│  Output Image (B, 3, H, W)                      │
+└────────────────────────────────────────────────┘
 ```
 
-### Window-based Attention
+### Key Components
 
-**Problem**: Looking at ALL pixels is expensive (O(n²) complexity)
-
-**Solution**: Only look at nearby pixels in a **window** (8×8 by default)
-
-```
-Image:                    Windows:
-┌─────────────────┐       ┌───┬───┬───┬───┐
-│                 │       │ 1 │ 2 │ 3 │ 4 │
-│                 │   →   ├───┼───┼───┼───┤
-│                 │       │ 5 │ 6 │ 7 │ 8 │
-│                 │       ├───┼───┼───┼───┤
-└─────────────────┘       │...│...│...│...│
-                          └───┴───┴───┴───┘
-
-Each window does attention independently
-Complexity: O(n) instead of O(n²)
-```
-
-### Shifted Windows
-
-**Problem**: Windows don't talk to each other
-
-**Solution**: Every other layer, shift the windows by half
-
-```
-Layer 1:          Layer 2 (shifted):
-┌───┬───┐         ╔═══╦═══╗
-│ A │ B │         ║ * │ * ║  ← Windows now overlap
-├───┼───┤    →    ╠═══╬═══╣     with previous boundaries
-│ C │ D │         ║ * │ * ║
-└───┴───┘         ╚═══╩═══╝
-
-This lets information flow across the whole image!
-```
-
----
-
-## Our Simplified Architecture
-
-### Overview
-
-```
-Input Image (dark)
-       ↓
-┌──────────────────┐
-│  Illumination    │ → Estimates dark_mask (where to enhance)
-│    Estimator     │
-└──────────────────┘
-       ↓
-┌──────────────────┐
-│  Shallow Feature │ → 3×3 conv to extract initial features
-│    Extraction    │
-└──────────────────┘
-       ↓
-┌──────────────────┐
-│     ENCODER      │ → 3 stages with Swin Transformer + Illum Attention
-│  (downsample 2x) │
-└──────────────────┘
-       ↓
-┌──────────────────┐
-│     DECODER      │ → 3 stages with skip connections
-│  (upsample 2x)   │
-└──────────────────┘
-       ↓
-┌──────────────────┐
-│  Output + Skip   │ → Add to input for residual learning
-└──────────────────┘
-       ↓
-  Enhanced Image
-```
-
-### Key Component: SimpleIllumAttention
-
-This is the **core innovation** - adaptive enhancement based on darkness:
-
-```python
-class SimpleIllumAttention(nn.Module):
-    """
-    Enhances dark regions more than bright regions.
-
-    Step 1: Channel Attention
-            Which feature channels are important?
-
-    Step 2: Spatial Modulation
-            Combine features with dark_mask to know WHERE to enhance
-
-    Step 3: Apply with learnable weight
-            output = features + gamma * enhanced
-            (gamma starts at 0, learns during training)
-    """
-```
-
-**The key equation:**
-
-```
-output = features + γ × (enhanced × dark_mask)
-         ↑          ↑         ↑         ↑
-     original  learnable  enhanced  where to
-     features   weight    features  apply
-```
-
-### Why residual connections?
-
-```
-Output = Input + Enhancement
-```
-
-This means:
-
-- Network only needs to learn the **difference** (easier!)
-- If enhancement is bad, it outputs 0 (keeps original)
-- Gradients flow easily during training
+1. **WindowAttention**: Efficient self-attention in local windows
+2. **SwinTransformerBlock**: Alternates W-MSA and SW-MSA (shifted windows)
+3. **RSTB**: Residual Swin Transformer Block (stack of Swin blocks + conv)
+4. **FeatureFusion**: Combines encoder and decoder features via skip connections
 
 ---
 
 ## Loss Functions Explained
 
-We use 5 losses that each handle a different aspect:
+### Hybrid Loss Composition
 
-### 1. L1 Loss (Reconstruction)
+We combine 5 different losses for comprehensive training:
 
-```
-L1 = mean(|prediction - target|)
-```
+#### 1. L1 Loss (Main Reconstruction)
 
-**What it does**: Ensures pixels are close to ground truth
-**Why we need it**: Main signal for brightness correction
-
-### 2. VGG Perceptual Loss
-
-```
-L_vgg = ||VGG_features(pred) - VGG_features(target)||²
+```python
+L1 = mean(|predicted - target|)
 ```
 
-**What it does**: Compares high-level features, not just pixels
-**Why we need it**: Prevents blurry outputs, preserves textures
+- **Weight**: 1.0 (highest)
+- **Purpose**: Match pixel values accurately
+- **Effect**: Overall brightness and color
 
-```
-L1 Only:                With VGG:
-┌────────────────┐      ┌────────────────┐
-│  Blurry, but   │      │  Sharp with    │
-│  correct avg   │  →   │  proper        │
-│  brightness    │      │  textures      │
-└────────────────┘      └────────────────┘
+#### 2. VGG Perceptual Loss
+
+```python
+VGG = mean(|VGG_features(pred) - VGG_features(target)|)
 ```
 
-### 3. Color Consistency Loss
+- **Weight**: 0.1
+- **Purpose**: Match high-level features (textures, patterns)
+- **Effect**: Natural-looking, perceptually similar results
 
-```
-L_color = 1 - cosine_similarity(pred, target)
-```
+#### 3. Color Consistency Loss
 
-**What it does**: Ensures colors match (regardless of brightness)
-**Why we need it**: Prevents washed-out, grayish outputs
-
-```
-Without Color Loss:     With Color Loss:
-┌────────────────┐      ┌────────────────┐
-│   Grayish,     │      │   Vibrant,     │
-│   desaturated  │  →   │   colorful     │
-└────────────────┘      └────────────────┘
+```python
+Color = mean(|mean_color(pred) - mean_color(target)|)
 ```
 
-### 4. Edge Loss
+- **Weight**: 0.5
+- **Purpose**: Preserve color tones
+- **Effect**: Prevents color shifts (too blue/yellow)
 
-```
-L_edge = ||Sobel(pred) - Sobel(target)||₁
-```
+#### 4. Edge Loss
 
-**What it does**: Ensures edges are sharp
-**Why we need it**: Maintains structural sharpness
-
-```
-Sobel filters detect edges:
-[-1  0  1]     [-1 -2 -1]
-[-2  0  2]     [ 0  0  0]
-[-1  0  1]     [ 1  2  1]
- horizontal     vertical
+```python
+Edge = mean(|sobel(pred) - sobel(target)|)
 ```
 
-### 5. Exposure Control Loss
+- **Weight**: 0.5
+- **Purpose**: Preserve sharp edges
+- **Effect**: Clear boundaries, no blur
 
+#### 5. Exposure Control Loss
+
+```python
+Exposure = mean(ReLU(pred - 0.95)²) + preserve_bright_regions
 ```
-L_exp = overexposure_penalty + bright_region_preservation
-```
 
-**What it does**: Prevents blowing out bright regions
-**Why we need it**: Avoids white patches in already-bright areas
+- **Weight**: 0.5
+- **Purpose**: Prevent overexposure
+- **Effect**: No blown-out highlights
 
-### Combined Loss
+### Total Loss
 
-```
-L_total = 1.0×L1 + 0.1×VGG + 0.5×Color + 0.5×Edge + 0.5×Exposure
+```python
+Total = 1.0×L1 + 0.1×VGG + 0.5×Color + 0.5×Edge + 0.5×Exposure
 ```
 
 ---
 
 ## Training Tips
 
-### 1. Learning Rate
+### 1. Start with Good Hyperparameters
 
-```
-Start: 0.0002
-End:   0.000001 (cosine annealing)
-Warmup: 5 epochs
-```
+```yaml
+model:
+  embed_dim: 60
+  depths: [4, 4, 4]
+  num_heads: [6, 6, 6]
+  window_size: 8
 
-Use **warmup** to avoid early training instability.
-
-### 2. Batch Size
-
-```
-GPU Memory    Recommended Batch Size
-4 GB          1-2
-8 GB          4
-12+ GB        8
+training:
+  batch_size: 4
+  learning_rate: 0.0002
+  epochs: 100
+  patch_size: 96
 ```
 
-### 3. Patch Size
+### 2. Data Augmentation
 
+```python
+augmentations = [
+    RandomCrop(96),
+    RandomHorizontalFlip(),
+    RandomVerticalFlip(),
+    RandomRotation90()
+]
 ```
-Training:  96×96 patches (random crops)
-Inference: Full resolution (with padding)
+
+### 3. Learning Rate Schedule
+
+```python
+# Cosine annealing with warmup
+warmup_epochs = 5
+scheduler = CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
 ```
 
-Training on patches is faster and provides data augmentation.
+### 4. Monitor Metrics
 
-### 4. Common Issues
+Track during training:
 
-| Problem           | Solution                   |
-| ----------------- | -------------------------- |
-| Blurry outputs    | Increase `lambda_edge`     |
-| Gray/washed out   | Increase `lambda_color`    |
-| Overexposed spots | Increase `lambda_exposure` |
-| Noisy outputs     | Decrease learning rate     |
-| Training unstable | Enable gradient clipping   |
+- **Loss**: Should decrease steadily
+- **PSNR**: Higher is better (>20 is good)
+- **SSIM**: Closer to 1 is better (>0.8 is good)
+
+### 5. GPU Memory Management
+
+If OOM errors:
+
+```python
+# Reduce batch size
+batch_size = 2
+
+# Reduce patch size
+patch_size = 64
+
+# Use gradient checkpointing
+use_checkpoint = True
+```
 
 ---
 
-## Code Walkthrough
+## Code Examples
 
-### File Structure
-
-```
-swinllie/
-├── models.py   # Model architecture
-│   ├── IlluminationEstimator  # Estimates dark regions
-│   ├── SimpleIllumAttention   # Adaptive enhancement attention
-│   ├── WindowAttention        # Swin Transformer attention
-│   ├── SwinTransformerBlock   # Basic transformer block
-│   ├── RSTB                   # Residual Swin block + illum attention
-│   └── SwinLLIE               # Full model
-│
-├── losses.py   # Loss functions
-│   ├── L1Loss                 # Pixel reconstruction
-│   ├── VGGPerceptualLoss      # Feature matching
-│   ├── ColorConsistencyLoss   # Color preservation
-│   ├── EdgeLoss               # Sharpness
-│   ├── ExposureControlLoss    # Overexposure prevention
-│   └── HybridLoss             # Combined loss
-│
-├── data.py     # Dataset loaders
-└── utils.py    # PSNR, SSIM metrics
-```
-
-### Quick Start Example
+### Quick Start
 
 ```python
-import torch
 from swinllie import SwinLLIE, HybridLoss
+import torch
 
-# Create model
+# 1. Create model
 model = SwinLLIE(
     embed_dim=60,
     depths=[4, 4, 4],
     num_heads=[6, 6, 6],
-    window_size=8,
-    use_igam=True  # Enable illumination attention
+    window_size=8
 )
 
-# Create loss
+# 2. Load image
+low_light_image = load_image('dark.jpg')  # (B, 3, H, W) in [0,1]
+
+# 3. Enhance
+with torch.no_grad():
+    enhanced = model(low_light_image)
+
+# 4. Training loss
 criterion = HybridLoss()
-
-# Forward pass
-low_light_image = torch.rand(1, 3, 128, 128)  # B, C, H, W
-enhanced = model(low_light_image)
-
-# Compute loss (during training)
-target = torch.rand(1, 3, 128, 128)
-illum, dark, bright = model.get_illumination_map(low_light_image)
-loss, breakdown = criterion(enhanced, target, illum, bright)
+loss, breakdown = criterion(enhanced, ground_truth)
 ```
+
+### Model Components
+
+```python
+# Pure SwinIR architecture
+swinllie/
+├── models.py
+│   ├── WindowAttention          # Core Swin attention
+│   ├── SwinTransformerBlock     # Transformer block
+│   ├── BasicLayer               # Stack of blocks
+│   ├── RSTB                     # Residual Swin block
+│   ├── FeatureFusion            # Skip connection fusion
+│   └── SwinLLIE                 # Main model
+│
+├── losses.py
+│   ├── L1Loss                   # Reconstruction
+│   ├── VGGPerceptualLoss        # Perceptual quality
+│   ├── ColorConsistencyLoss     # Color preservation
+│   ├── EdgeLoss                 # Sharpness
+│   ├── ExposureControlLoss      # Prevent overexposure
+│   └── HybridLoss               # Combined
+│
+├── data.py                      # Dataset loaders
+└── utils.py                     # PSNR, SSIM metrics
+```
+
+---
+
+## Summary: Key Concepts
+
+1. **Low-light challenge** = Dark images lose details, have noise, washed colors
+
+2. **Window-based attention** = Efficient self-attention in local windows (268× faster)
+
+3. **Multi-scale processing** = Encoder-decoder handles different scales
+
+4. **Pure SwinIR** = End-to-end learning with proven architecture
+
+5. **Hybrid loss** = L1 + VGG + Color + Edge + Exposure for comprehensive training
+
+6. **Skip connections** = Preserve fine details through direct pathways
 
 ---
 
 ## Further Reading
 
-- [Swin Transformer Paper](https://arxiv.org/abs/2103.14030)
-- [SwinIR Paper](https://arxiv.org/abs/2108.10257)
-- [Retinex Theory](https://en.wikipedia.org/wiki/Color_constancy)
-- [LOL Dataset](https://daooshee.github.io/BMVC2018website/)
+- Original SwinIR paper: "SwinIR: Image Restoration Using Swin Transformer"
+- Swin Transformer: "Swin Transformer: Hierarchical Vision Transformer using Shifted Windows"
+- Dataset: LOL (Low-Light) Dataset
 
 ---
 
-## Summary
-
-1. **Low-light enhancement** = brighten dark regions, protect bright regions
-2. **Retinex theory** = Image = Reflectance × Illumination
-3. **Window attention** = efficient self-attention in local windows
-4. **Our key innovation** = SimpleIllumAttention adapts enhancement spatially
-5. **5 losses** = L1, VGG, Color, Edge, Exposure work together
+**Happy Training! 🚀**

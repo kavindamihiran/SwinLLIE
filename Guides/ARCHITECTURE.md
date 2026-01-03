@@ -82,82 +82,26 @@ Detailed technical documentation for the pure SwinIR model for low-light image e
 
 ### 1. Shallow Feature Extraction
 
-**Purpose**: Convert input image to feature representation. # Simple 3-layer CNN
-self.net = nn.Sequential(
-nn.Conv2d(in_channels, hidden_dim, 3, padding=1),
-nn.ReLU(inplace=True),
-nn.Conv2d(hidden_dim, hidden_dim, 3, padding=1),
-nn.ReLU(inplace=True),
-nn.Conv2d(hidden_dim, 1, 3, padding=1),
-nn.Sigmoid()
-)
-
-    def forward(self, x):
-        # Combine rough (max RGB) + refined (learned)
-        rough = torch.max(x, dim=1, keepdim=True)[0]
-        refined = self.net(x)
-        illum_map = 0.4 * rough + 0.6 * refined
-        dark_mask = 1.0 - illum_map
-        bright_mask = clamp((illum_map - 0.6) / 0.4)
-        return illum_map, dark_mask, bright_mask
-
-````
-
-**Outputs**:
-- `illum_map`: (B, 1, H, W) - brightness level (0=dark, 1=bright)
-- `dark_mask`: (B, 1, H, W) - where to enhance (1=dark)
-- `bright_mask`: (B, 1, H, W) - where to protect (1=bright)
-
----
-
-### 2. SimpleIllumAttention
-
-**Purpose**: Adapt enhancement strength based on darkness level.
+**Purpose**: Convert input RGB image to feature representation.
 
 ```python
-class SimpleIllumAttention(nn.Module):
-    def __init__(self, dim, reduction=4):
-        # Channel attention (SE-style)
-        self.channel_att = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(dim, dim // reduction, 1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(dim // reduction, dim, 1),
-            nn.Sigmoid()
-        )
+class ConvFirst(nn.Module):
+    """Simple 3x3 convolution to extract initial features"""
+    def __init__(self, in_channels=3, embed_dim=60):
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels, embed_dim, 3, 1, 1)
 
-        # Spatial modulation
-        self.spatial_mod = nn.Sequential(
-            nn.Conv2d(dim + 1, dim, 3, padding=1),  # +1 for dark_mask
-            nn.ReLU(inplace=True),
-            nn.Conv2d(dim, dim, 3, padding=1)
-        )
+    def forward(self, x):
+        # Input: (B, 3, H, W)
+        # Output: (B, 60, H, W)
+        return self.conv(x)
+```
 
-        # Learnable blend (starts at 0)
-        self.gamma = nn.Parameter(torch.zeros(1))
-
-    def forward(self, features, dark_mask, bright_mask=None):
-        # Channel attention
-        ch_att = self.channel_att(features)
-
-        # Spatial modulation with dark mask
-        combined = torch.cat([features, dark_mask], dim=1)
-        spatial = self.spatial_mod(combined)
-        enhanced = spatial * ch_att * (0.5 + 0.5 * dark_mask)
-
-        # Protect bright regions
-        if bright_mask is not None:
-            enhanced = enhanced * (1.0 - 0.7 * bright_mask)
-
-        # Residual with learnable weight
-        return features + self.gamma * enhanced
-````
-
-**Key insight**: `gamma` starts at 0, so initially the network just passes features through. During training, it learns how much enhancement to apply.
+**Purpose**: Maps RGB pixels to a higher-dimensional feature space that Swin Transformer blocks can process.
 
 ---
 
-### 3. WindowAttention
+### 2. WindowAttention
 
 **Purpose**: Efficient self-attention within local windows.
 
@@ -195,9 +139,9 @@ Alternating between regular and shifted windows.
 
 ---
 
-### 5. RSTB (Residual Swin Transformer Block)
+### 4. RSTB (Residual Swin Transformer Block)
 
-**Purpose**: Stack of transformer blocks + illumination attention.
+**Purpose**: Stack of Swin Transformer blocks with residual connection.
 
 ```
 Input
@@ -212,18 +156,17 @@ Input
 Conv 3×3 (residual conv)
   │
   ▼
-SimpleIllumAttention (if enabled)
-  │
-  ▼
 + Input (residual)
   │
   ▼
 Output
 ```
 
+**Key insight**: The residual connection allows gradients to flow directly, making deep networks trainable.
+
 ---
 
-### 6. FeatureFusion
+### 5. FeatureFusion
 
 **Purpose**: Fuse encoder skip connection with decoder features.
 
@@ -231,10 +174,11 @@ Output
 class FeatureFusion(nn.Module):
     def forward(self, enc_feat, dec_feat):
         concat = torch.cat([enc_feat, dec_feat], dim=1)
-        gate = self.gate(concat)  # Learned attention
         fused = self.conv(concat)
-        return gate * enc_feat + (1 - gate) * dec_feat + fused
+        return enc_feat + dec_feat + fused
 ```
+
+**Key insight**: Simple addition + learned fusion creates effective multi-scale feature integration.
 
 ---
 
@@ -246,25 +190,23 @@ class FeatureFusion(nn.Module):
 # Input: (1, 3, 128, 128) normalized [0, 1]
 x = torch.randn(1, 3, 128, 128)
 
-# Step 1: Illumination estimation
-illum, dark, bright = model.illum_estimator(x)
-# dark: (1, 1, 128, 128) - high where dark
-
-# Step 2: Shallow features
+# Step 1: Shallow features
 shallow = model.conv_first(x)  # (1, 60, 128, 128)
 
-# Step 3: Encoder
-enc1 = RSTB(shallow, dark_mask=dark)        # (1, 60, 128, 128)
-enc2 = RSTB(downsample(enc1), dark_mask)    # (1, 120, 64, 64)
-enc3 = RSTB(downsample(enc2), dark_mask)    # (1, 240, 32, 32)
+# Step 2: Encoder - Multi-scale processing
+enc1 = RSTB(shallow)                    # (1, 60, 128, 128)
+enc2 = RSTB(downsample(enc1))           # (1, 120, 64, 64)
+enc3 = RSTB(downsample(enc2))           # (1, 240, 32, 32)
 
-# Step 4: Decoder with skip connections
-dec2 = RSTB(fuse(enc2, upsample(enc3)))     # (1, 120, 64, 64)
-dec1 = RSTB(fuse(enc1, upsample(dec2)))     # (1, 60, 128, 128)
+# Step 3: Decoder with skip connections
+dec2 = RSTB(fuse(enc2, upsample(enc3))) # (1, 120, 64, 64)
+dec1 = RSTB(fuse(enc1, upsample(dec2))) # (1, 60, 128, 128)
 
-# Step 5: Output
+# Step 4: Output reconstruction
 out = conv_last(conv_after(dec1) + shallow) + x  # (1, 3, 128, 128)
 ```
+
+**Flow**: Input → Extract Features → Encode (downsample) → Decode (upsample + skip) → Output
 
 ---
 
@@ -275,9 +217,9 @@ out = conv_last(conv_after(dec1) + shallow) + x  # (1, 3, 128, 128)
 | Variant | embed_dim | depths  | num_heads  | Parameters |
 | ------- | --------- | ------- | ---------- | ---------- |
 | Tiny    | 48        | [2,2,2] | [4,4,4]    | ~2M        |
-| Small   | 60        | [4,4,4] | [6,6,6]    | ~6.5M      |
-| Base    | 96        | [6,6,6] | [8,8,8]    | ~15M       |
-| Large   | 128       | [8,8,8] | [12,12,12] | ~30M       |
+| Small   | 60        | [4,4,4] | [6,6,6]    | ~4.7M      |
+| Base    | 96        | [6,6,6] | [8,8,8]    | ~12M       |
+| Large   | 128       | [8,8,8] | [12,12,12] | ~25M       |
 
 ### Key Parameters
 
@@ -286,7 +228,6 @@ out = conv_last(conv_after(dec1) + shallow) + x  # (1, 3, 128, 128)
 | `window_size`    | 8       | Attention window size            |
 | `mlp_ratio`      | 2.0     | MLP hidden dim = dim × mlp_ratio |
 | `drop_path_rate` | 0.1     | Stochastic depth rate            |
-| `use_igam`       | True    | Enable illumination attention    |
 
 ---
 
@@ -308,13 +249,13 @@ out = conv_last(conv_after(dec1) + shallow) + x  # (1, 3, 128, 128)
 
 ---
 
-## Differences from Original SwinIR
+## Comparison with Original SwinIR
 
-| Aspect        | Original SwinIR  | Swin-LLIE                             |
-| ------------- | ---------------- | ------------------------------------- |
-| Task          | Super-resolution | Low-light enhancement                 |
-| Attention     | Window only      | Window + Illumination-guided          |
-| Architecture  | Single-scale     | U-Net encoder-decoder                 |
-| Normalization | LayerNorm only   | LayerNorm + InstanceNorm in attention |
-| Loss          | L1               | Hybrid (L1+VGG+Color+Edge+Exposure)   |
-| Parameters    | ~12M (large)     | ~6.5M (efficient)                     |
+| Aspect       | Original SwinIR  | Our Implementation                  |
+| ------------ | ---------------- | ----------------------------------- |
+| Task         | Super-resolution | Low-light enhancement               |
+| Architecture | Single-scale     | U-Net encoder-decoder               |
+| Attention    | Window only      | Window only (pure SwinIR)           |
+| Loss         | L1               | Hybrid (L1+VGG+Color+Edge+Exposure) |
+| Parameters   | ~12M (large)     | ~4.7M (efficient)                   |
+| Training     | Patch-based      | Patch-based with data augmentation  |
