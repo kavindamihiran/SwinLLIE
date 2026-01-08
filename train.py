@@ -74,12 +74,14 @@ if __name__ == '__main__':
 
     # Check GPU compatibility (CUDA capability must be >= 7.0 for PyTorch 2.0+)
     use_cuda = False
+    num_gpus = 0
     if torch.cuda.is_available():
         try:
             capability = torch.cuda.get_device_capability()
             compute_capability = capability[0] + capability[1] / 10
             if compute_capability >= 7.0:
                 use_cuda = True
+                num_gpus = torch.cuda.device_count()
             else:
                 print(f'GPU detected but incompatible (compute capability {compute_capability:.1f} < 7.0)')
                 print('Falling back to CPU...')
@@ -88,6 +90,10 @@ if __name__ == '__main__':
     
     device = torch.device('cuda' if use_cuda else 'cpu')
     print(f'Device: {device}')
+    if num_gpus > 1:
+        print(f'Found {num_gpus} GPUs - will use DataParallel for multi-GPU training')
+    elif num_gpus == 1:
+        print(f'Found 1 GPU')
     print(f'Config: {args.config}')
 
     # Model - use parameters from config
@@ -108,6 +114,11 @@ if __name__ == '__main__':
         resi_connection=model_cfg.get('resi_connection', '1conv'),
         use_igam=model_cfg.get('use_igam', True)
     ).to(device)
+    
+    # Enable multi-GPU training if available
+    if num_gpus > 1:
+        model = torch.nn.DataParallel(model)
+        print(f'Model wrapped with DataParallel across {num_gpus} GPUs')
     
     # Loss with config parameters
     criterion = HybridLoss(
@@ -148,7 +159,15 @@ if __name__ == '__main__':
     start_epoch = 0
     if resume_cfg.get('enabled', False) and os.path.exists(resume_cfg.get('checkpoint_path', '')):
         checkpoint = torch.load(resume_cfg['checkpoint_path'], map_location=device)
-        model.load_state_dict(checkpoint['model_state_dict'])
+        # Handle both DataParallel and non-DataParallel checkpoints
+        state_dict = checkpoint['model_state_dict']
+        if num_gpus > 1 and not any(k.startswith('module.') for k in state_dict.keys()):
+            # Add 'module.' prefix if loading non-DataParallel checkpoint into DataParallel model
+            state_dict = {'module.' + k: v for k, v in state_dict.items()}
+        elif num_gpus <= 1 and any(k.startswith('module.') for k in state_dict.keys()):
+            # Remove 'module.' prefix if loading DataParallel checkpoint into non-DataParallel model
+            state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
+        model.load_state_dict(state_dict)
         start_epoch = checkpoint.get('epoch', 0) + 1
         print(f'Resumed from epoch {start_epoch}')
 
@@ -164,17 +183,21 @@ if __name__ == '__main__':
         total_loss = 0
         
         pbar = tqdm(train_loader, desc=f'Epoch {epoch+1}/{EPOCHS}')
-        for batch in pbar:
-            low, high = batch['low'].to(device), batch['high'].to(device)
-            
-            optimizer.zero_grad()
-            
-            if USE_AMP and scaler is not None:
-                with autocast('cuda'):
-                    output = model(low)
-                    illum, dark_mask, bright_mask = model.get_illumination_map(low)
+        for batch in# Access the underlying model for methods if using DataParallel
+                    base_model = model.module if isinstance(model, torch.nn.DataParallel) else model
+                    illum, dark_mask, bright_mask = base_model.get_illumination_map(low)
                     loss, _ = criterion(output, high, illum, bright_mask)
                 
+                scaler.scale(loss).backward()
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                output = model(low)
+                # Access the underlying model for methods if using DataParallel
+                base_model = model.module if isinstance(model, torch.nn.DataParallel) else model
+                illum, dark_mask, bright_mask = base_
                 scaler.scale(loss).backward()
                 scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
@@ -195,10 +218,15 @@ if __name__ == '__main__':
         scheduler.step()
         avg_loss = total_loss / len(train_loader)
         print(f'Epoch {epoch+1}: Loss = {avg_loss:.4f}, LR = {scheduler.get_last_lr()[0]:.6f}')
-        
+        # Save state_dict without 'module.' prefix for compatibility
+            state_dict = model.module.state_dict() if isinstance(model, torch.nn.DataParallel) else model.state_dict()
+            interval_best_state = {k: v.clone() for k, v in state_dict
         # Track best loss within each 10-epoch interval
         if avg_loss < interval_best_loss:
-            interval_best_loss = avg_loss
+            if isinstance(model, torch.nn.DataParallel):
+                model.module.load_state_dict(interval_best_state)
+            else:
+                interval_best_loss = avg_loss
             interval_best_state = {k: v.clone() for k, v in model.state_dict().items()}
         
         # At every 10th epoch, evaluate PSNR/SSIM on best-loss model from interval
@@ -217,10 +245,13 @@ if __name__ == '__main__':
                             'psnr': psnr, 'ssim': ssim, 'loss': interval_best_loss}, f'{SAVE_DIR}/checkpoints/best.pth')
                 print(f'  -> New best! PSNR: {best_psnr:.2f}, SSIM: {best_ssim:.4f}, Loss: {best_loss:.4f}')
             
-            # Reset for next interval
-            interval_best_loss = float('inf')
-            interval_best_state = None
-        
+            # Save without 'module.' prefix for compatibility
+            state_dict = model.module.state_dict() if isinstance(model, torch.nn.DataParallel) else model.state_dict()
+            torch.save({'model_state_dict': state_dict, 'epoch': epoch}, f'{SAVE_DIR}/checkpoints/epoch_{epoch+1}.pth')
+
+    # Final save
+    state_dict = model.module.state_dict() if isinstance(model, torch.nn.DataParallel) else model.state_dict()
+    torch.save({'model_state_dict': state_dict
         if (epoch + 1) % SAVE_FREQ == 0:
             torch.save({'model_state_dict': model.state_dict(), 'epoch': epoch}, f'{SAVE_DIR}/checkpoints/epoch_{epoch+1}.pth')
 
