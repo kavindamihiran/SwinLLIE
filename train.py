@@ -131,23 +131,6 @@ if __name__ == '__main__':
         lambda_ssim=loss_cfg.get('lambda_ssim', 0.1)
     ).to(device)
     
-    # Optimizer with config parameters
-    # Scale learning rate with batch size (linear scaling rule)
-    effective_lr = LR * (BATCH_SIZE / base_batch_size) if num_gpus > 1 else LR
-    if num_gpus > 1:
-        print(f'  Learning rate scaled: {LR} -> {effective_lr:.6f}')
-    
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=effective_lr,
-        weight_decay=train_cfg.get('weight_decay', 1e-4),
-        betas=tuple(train_cfg.get('betas', [0.9, 0.999]))
-    )
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS, eta_min=MIN_LR)
-    scaler = GradScaler() if USE_AMP else None
-
-    print(f'Model params: {sum(p.numel() for p in model.parameters()):,}')
-
     # Auto-scale batch size and workers for multi-GPU
     base_batch_size = BATCH_SIZE
     base_num_workers = dataset_cfg.get('num_workers', 4)
@@ -163,6 +146,23 @@ if __name__ == '__main__':
     else:
         num_workers_scaled = base_num_workers
         print(f'Single GPU setup: batch_size={BATCH_SIZE}, workers={num_workers_scaled}')
+    
+    # Optimizer with config parameters
+    # Scale learning rate with batch size (linear scaling rule)
+    effective_lr = LR * (BATCH_SIZE / base_batch_size) if num_gpus > 1 else LR
+    if num_gpus > 1:
+        print(f'  Learning rate: {LR} -> {effective_lr:.6f}')
+    
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=effective_lr,
+        weight_decay=train_cfg.get('weight_decay', 1e-4),
+        betas=tuple(train_cfg.get('betas', [0.9, 0.999]))
+    )
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS, eta_min=MIN_LR)
+    scaler = GradScaler() if USE_AMP else None
+
+    print(f'Model params: {sum(p.numel() for p in model.parameters()):,}')
     
     # Data - use config parameters
     train_loader = get_dataloader(
