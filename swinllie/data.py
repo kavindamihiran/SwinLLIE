@@ -302,7 +302,9 @@ def get_dataloader(dataset_type, root_dir, split='train', batch_size=8,
         shuffle=shuffle,
         num_workers=num_workers,
         pin_memory=pin_memory and torch.cuda.is_available(),
-        drop_last=(split == 'train')
+        drop_last=(split == 'train'),
+        persistent_workers=(num_workers > 0),  # Keep workers alive between epochs
+        prefetch_factor=2 if num_workers > 0 else None  # Prefetch batches for faster loading
     )
     
     return dataloader

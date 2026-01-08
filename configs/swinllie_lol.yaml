@@ -28,13 +28,13 @@ dataset:
   name: "lol" # Options: lol, generic, unpaired
   root_dir: "./datasets/LOL" # Path to LOL dataset
   patch_size: 96
-  num_workers: 4
+  num_workers: 4 # Per GPU (auto-scaled based on GPU count)
 
 # =============================================================================
 # Training Configuration
 # =============================================================================
 training:
-  batch_size: 4
+  batch_size: 8 # Per GPU base (auto-scaled: 8 for 1 GPU, 16 for 2 GPUs)
   epochs: 100
 
   # Optimizer

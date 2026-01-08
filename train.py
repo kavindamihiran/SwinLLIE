@@ -132,9 +132,14 @@ if __name__ == '__main__':
     ).to(device)
     
     # Optimizer with config parameters
+    # Scale learning rate with batch size (linear scaling rule)
+    effective_lr = LR * (BATCH_SIZE / base_batch_size) if num_gpus > 1 else LR
+    if num_gpus > 1:
+        print(f'  Learning rate scaled: {LR} -> {effective_lr:.6f}')
+    
     optimizer = torch.optim.AdamW(
         model.parameters(),
-        lr=LR,
+        lr=effective_lr,
         weight_decay=train_cfg.get('weight_decay', 1e-4),
         betas=tuple(train_cfg.get('betas', [0.9, 0.999]))
     )
@@ -143,6 +148,22 @@ if __name__ == '__main__':
 
     print(f'Model params: {sum(p.numel() for p in model.parameters()):,}')
 
+    # Auto-scale batch size and workers for multi-GPU
+    base_batch_size = BATCH_SIZE
+    base_num_workers = dataset_cfg.get('num_workers', 4)
+    
+    if num_gpus > 1:
+        # Scale batch size by number of GPUs
+        BATCH_SIZE = base_batch_size * num_gpus
+        # Scale workers by number of GPUs
+        num_workers_scaled = base_num_workers * num_gpus
+        print(f'Auto-scaling for {num_gpus} GPUs:')
+        print(f'  Batch size: {base_batch_size} -> {BATCH_SIZE} ({base_batch_size} per GPU)')
+        print(f'  Workers: {base_num_workers} -> {num_workers_scaled} ({base_num_workers} per GPU)')
+    else:
+        num_workers_scaled = base_num_workers
+        print(f'Single GPU setup: batch_size={BATCH_SIZE}, workers={num_workers_scaled}')
+    
     # Data - use config parameters
     train_loader = get_dataloader(
         dataset_cfg['name'], 
@@ -150,9 +171,15 @@ if __name__ == '__main__':
         'train', 
         BATCH_SIZE, 
         PATCH_SIZE, 
-        num_workers=dataset_cfg.get('num_workers', 4)
+        num_workers=num_workers_scaled
     )
+    
+    # Enable pin_memory for faster data transfer if using CUDA
+    if hasattr(train_loader, 'pin_memory') and use_cuda:
+        train_loader.pin_memory = True
+    
     print(f'Training samples: {len(train_loader.dataset)}')
+    print(f'Total batch size: {BATCH_SIZE}')
 
     # Resume training if enabled
     start_epoch = 0
@@ -183,9 +210,11 @@ if __name__ == '__main__':
         
         pbar = tqdm(train_loader, desc=f'Epoch {epoch+1}/{EPOCHS}')
         for batch in pbar:
-            low, high = batch['low'].to(device), batch['high'].to(device)
+            # Use non_blocking=True for async GPU transfer (faster with pin_memory)
+            low = batch['low'].to(device, non_blocking=True)
+            high = batch['high'].to(device, non_blocking=True)
             
-            optimizer.zero_grad()
+            optimizer.zero_grad()  # Standard version for maximum compatibility
             
             if USE_AMP and scaler is not None:
                 with autocast('cuda'):
