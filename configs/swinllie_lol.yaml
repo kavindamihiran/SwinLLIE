@@ -67,13 +67,16 @@ training:
 # =============================================================================
 loss:
   lambda_l1: 1.0
+  lambda_ssim: 1.0
   lambda_vgg: 0.1
-  lambda_color: 0.5
-  lambda_smooth: 0.01
-  lambda_edge: 1.0
-  lambda_exposure: 1.0 # Prevents overexposure in bright regions
-  use_ssim: false
-  lambda_ssim: 0.1
+
+  use_ssim: true
+
+  # Disabled / Secondary Losses (set to 0.0 to exclude)
+  lambda_color: 0.0
+  lambda_smooth: 0.0
+  lambda_edge: 0.0
+  lambda_exposure: 0.0
 
 # =============================================================================
 # Validation Configuration
