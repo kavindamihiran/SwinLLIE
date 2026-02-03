@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Training outputs
+experiments/
+!experiments/test_run/checkpoints/best.pth
+datasets/
+test_results/
+
+# Test data (optional - comment out if you want examples in the UI)
+# test/
+
+# Gradio cache
+.gradio/
+
+# Documentation (not needed in runtime)
+Guides/
+README.md
+*.md
+
+# Config files (not needed in runtime)
+configs/
+
+# Training scripts (not needed for inference)
+train.py
+
+# System
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
