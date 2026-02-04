@@ -67,7 +67,7 @@ Transformer-based approaches have recently emerged as powerful alternatives. The
 
 \subsection{Architecture Overview}
 
-SwinLLIE enhances low-light images by utilizing multi-scale spatial feature extraction through a U-Net encoder-decoder architecture powered by Swin Transformer blocks. The architecture consists of three main stages: shallow feature extraction, deep feature extraction through encoder-decoder processing, and image reconstruction.
+SwinLLIE enhances low-light images by utilizing multi-scale spatial feature extraction through a U-Net encoder-decoder architecture~\cite{ronneberger2015unet} powered by Swin Transformer blocks. The architecture consists of three main stages: shallow feature extraction, deep feature extraction through encoder-decoder processing, and image reconstruction.
 
 \begin{figure}[htbp]
 \centerline{\fbox{\parbox{0.45\textwidth}{\centering
@@ -271,7 +271,7 @@ Retinexformer~\cite{cai2023retinexformer} & 25.16 & 0.855 \\
 \label{tab:results}
 \end{table}
 
-While recent transformer methods achieve higher PSNR, SwinLLIE demonstrates that window-based attention mechanisms can achieve competitive SSIM (0.840 vs 0.842 for SNR-Net) with significantly fewer parameters than large-scale models (4.7M vs 39.1M for SNR-Net). Compared to classical methods, SwinLLIE achieves +0.29 dB PSNR improvement over RetinexNet and significantly outperforms EnlightenGAN in SSIM (+0.22), demonstrating effective structural preservation.
+While recent transformer methods achieve higher PSNR, SwinLLIE demonstrates that window-based attention mechanisms can achieve competitive perceptual quality (0.840 SSIM) with significantly fewer parameters than large-scale models (4.7M vs 39.1M for SNR-Net). Compared to classical methods, SwinLLIE achieves +0.29 dB PSNR improvement over RetinexNet and significantly outperforms EnlightenGAN in SSIM (0.840 vs 0.617)~\cite{wang2004ssim}, demonstrating effective structural preservation.
 
 Table~\ref{tab:efficiency} provides a parameter efficiency comparison among representative methods.
 
@@ -367,6 +367,12 @@ Y. Cai, H. Bian, J. Peng, N. Cao, Q. H. Nguyen, Y. Shen, and L. Zhang, ``Retinex
 
 \bibitem{wang2023llformer}
 T. Wang, K. Zhang, T. Shen, W. Luo, B. Stenger, and T. Lu, ``Ultra-High-Definition Low-Light Image Enhancement: A Benchmark and Transformer-Based Method,'' in \textit{Proc. AAAI Conf. Artif. Intell.}, vol. 37, pp. 2654--2662, 2023.
+
+\bibitem{ronneberger2015unet}
+O. Ronneberger, P. Fischer, and T. Brox, ``U-Net: Convolutional Networks for Biomedical Image Segmentation,'' in \textit{Proc. Int. Conf. Med. Image Comput. Comput.-Assist. Interv. (MICCAI)}, pp. 234--241, 2015.
+
+\bibitem{wang2004ssim}
+Z. Wang, A. C. Bovik, H. R. Sheikh, and E. P. Simoncelli, ``Image Quality Assessment: From Error Visibility to Structural Similarity,'' \textit{IEEE Trans. Image Process.}, vol. 13, no. 4, pp. 600--612, 2004.
 
 \end{thebibliography}
 
