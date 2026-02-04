@@ -18,6 +18,10 @@
 
 \title{SwinLLIE: Swin Transformer for Low-Light Image Enhancement with Multi-Scale Processing}
 
+\author{\IEEEauthorblockN{K. K. M. Nandun Bandara}
+\IEEEauthorblockA{\textit{Department of Computational Mathematics} \\
+\textit{University of Moratuwa}\\
+Colombo, Sri Lanka \\}}
 
 \maketitle
 
@@ -45,8 +49,8 @@ The key contributions of this work are:
 \begin{itemize}
     \item A hybrid CNN-Swin Transformer architecture adapted for low-light enhancement with an encoder-decoder structure featuring skip connections
     \item An efficient window-based attention mechanism that reduces computational complexity from $O(N^2)$ to $O(N \times w^2)$ where $w$ is the window size
-    \item A comprehensive hybrid loss function combining reconstruction, perceptual, color, edge, and exposure control losses
-    \item A compact model with approximately 4.7M parameters suitable for efficient deployment
+    \item A systematic study of Swin Transformer adaptation for low-light enhancement, providing insights for future architectures
+    \item Analysis of hybrid loss functions for balancing reconstruction and perceptual quality in illumination enhancement tasks
 \end{itemize}
 
 % ----------------------------------------------------------------
@@ -158,10 +162,14 @@ To preserve high-level features and textures, we compute the L2 distance in VGG1
 where $\phi_i$ represents features from pretrained VGG19.
 
 \subsection{Color Consistency Loss}
-To prevent color shifts common in low-light enhancement:
+To prevent color shifts, we compute per-pixel cosine similarity:
 \begin{equation}
-\mathcal{L}_{color} = 1 - \frac{1}{N}\sum_{n} \frac{I_{\text{pred}}^{(n)} \cdot I_{\text{gt}}^{(n)}}{\|I_{\text{pred}}^{(n)}\| \|I_{\text{gt}}^{(n)}\|}
+\mathcal{L}_{color} = 1 - \frac{1}{HW}\sum_{h=1}^{H}\sum_{w=1}^{W} 
+\frac{\mathbf{I}_{\text{pred}}(h,w) \cdot \mathbf{I}_{\text{gt}}(h,w)}
+{\|\mathbf{I}_{\text{pred}}(h,w)\|_2 \|\mathbf{I}_{\text{gt}}(h,w)\|_2 + \epsilon}
 \end{equation}
+where $\mathbf{I}(h,w) \in \mathbb{R}^3$ denotes the RGB vector at spatial 
+location $(h,w)$ and $\epsilon=10^{-8}$ prevents division by zero.
 
 \subsection{Edge Preservation Loss}
 Using Sobel operators $S_x$ and $S_y$ for edge detection:
@@ -171,11 +179,14 @@ Using Sobel operators $S_x$ and $S_y$ for edge detection:
 where $E(I) = \sqrt{(S_x * I)^2 + (S_y * I)^2}$.
 
 \subsection{Exposure Control Loss}
-To prevent overexposure in bright regions:
+To prevent overexposure while preserving bright regions:
 \begin{equation}
-\mathcal{L}_{exp} = \|\text{ReLU}(I_{\text{pred}} - 0.95)\|_2^2 + \lambda_b \mathcal{L}_{bright}
+\mathcal{L}_{exp} = \|\text{ReLU}(I_{\text{pred}} - \tau_h)\|_2^2 + 
+\lambda_b \|M_b \odot (I_{\text{pred}} - I_{\text{gt}})\|_1
 \end{equation}
-where $\mathcal{L}_{bright}$ preserves already-bright regions from the target.
+where $\tau_h = 0.95$ is the highlight threshold, 
+$M_b = \mathbf{1}[I_{\text{gt}} > 0.8]$ is a binary mask identifying 
+bright regions in the ground truth, and $\odot$ denotes element-wise multiplication.
 
 \subsection{Total Loss}
 The combined objective function is:
