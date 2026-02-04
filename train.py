@@ -81,7 +81,9 @@ if __name__ == '__main__':
             compute_capability = capability[0] + capability[1] / 10
             if compute_capability >= 7.0:
                 use_cuda = True
-                num_gpus = torch.cuda.device_count()
+                # Force single GPU usage even if multiple are available due to quality degrating if use multi gpu
+                num_gpus = 1 
+                # num_gpus = torch.cuda.device_count() # Disabled multi-GPU support
             else:
                 print(f'GPU detected but incompatible (compute capability {compute_capability:.1f} < 7.0)')
                 print('Falling back to CPU...')
