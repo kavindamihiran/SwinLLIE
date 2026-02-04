@@ -116,8 +116,6 @@ To enable cross-window connections, shifted window attention (SW-MSA) is alterna
 
 \subsection{Residual Swin Transformer Block (RSTB)}
 
-\subsection{Residual Swin Transformer Block (RSTB)}
-
 Each RSTB, adopted from SwinIR~\cite{liang2021swinir}, contains a stack of Swin Transformer blocks followed by a convolutional layer with a residual connection:
 
 \begin{equation}
@@ -136,8 +134,6 @@ Y &= \text{MLP}(\text{LN}(Y')) + Y'
 
 \subsection{Feature Fusion for Skip Connections}
 
-\subsection{Feature Fusion for Skip Connections}
-
 To effectively combine encoder and decoder features, we employ a learnable fusion module regarding the skip connections concept~\cite{ronneberger2015unet}:
 \begin{equation}
 F_{\text{fused}} = F_{\text{enc}} + F_{\text{dec}} + \text{Conv}([F_{\text{enc}}, F_{\text{dec}}])
@@ -153,20 +149,20 @@ where $[\cdot, \cdot]$ denotes concatenation along the channel dimension. This t
 We employ a hybrid loss function that balances reconstruction accuracy with perceptual quality:
 
 \subsection{L1 Reconstruction Loss}
-The primary reconstruction loss~\cite{zhao2016loss} ensures pixel-level accuracy:
+The primary reconstruction loss~\cite{isola2016pix2pix} ensures pixel-level accuracy:
 \begin{equation}
 \mathcal{L}_{L1} = \mathbb{E}[\|I_{\text{pred}} - I_{\text{gt}}\|_1]
 \end{equation}
 
 \subsection{VGG Perceptual Loss}
-To preserve high-level features and textures, we compute the L2 distance in VGG19 feature space~\cite{johnson2016perceptual}:
+To preserve high-level features and textures, we compute a feature-space (perceptual) loss in pretrained VGG feature space~\cite{simonyan2014vgg}, as commonly used in image restoration~\cite{ledig2016srgan} and supported by evidence that deep features better correlate with perceptual similarity than pixel losses~\cite{zhang2018lpips}:
 \begin{equation}
 \mathcal{L}_{VGG} = \sum_{i} \|\phi_i(I_{\text{pred}}) - \phi_i(I_{\text{gt}})\|_2^2
 \end{equation}
 where $\phi_i$ represents features from pretrained VGG19.
 
 \subsection{Color Consistency Loss}
-To prevent color shifts, we adopt the color consistency loss from~\cite{guo2020zero} and compute per-pixel cosine similarity:
+To prevent color shifts, we adopt an angular (cosine) color consistency loss that treats RGB values as 3D vectors and measures the per-pixel cosine similarity~\cite{park2023dualcolor}:
 \begin{equation}
 \mathcal{L}_{color} = 1 - \frac{1}{HW}\sum_{h=1}^{H}\sum_{w=1}^{W} 
 \frac{\mathbf{I}_{\text{pred}}(h,w) \cdot \mathbf{I}_{\text{gt}}(h,w)}
@@ -176,14 +172,14 @@ where $\mathbf{I}(h,w) \in \mathbb{R}^3$ denotes the RGB vector at spatial
 location $(h,w)$ and $\epsilon=10^{-8}$ prevents division by zero.
 
 \subsection{Edge Preservation Loss}
-Using Sobel operators $S_x$ and $S_y$ for edge detection:
+Using Sobel operators $S_x$ and $S_y$ for edge detection and matching edge strength between prediction and ground truth~\cite{edrnet2025edgematching}:
 \begin{equation}
 \mathcal{L}_{edge} = \|E(I_{\text{pred}}) - E(I_{\text{gt}})\|_1
 \end{equation}
 where $E(I) = \sqrt{(S_x * I)^2 + (S_y * I)^2}$.
 
 \subsection{Exposure Control Loss}
-To prevent overexposure while preserving bright regions, we utilize the exposure control loss~\cite{guo2020zero}:
+To prevent overexposure while preserving bright regions, we propose an exposure/highlight control loss inspired by prior work on overexposure handling and saturated-region emphasis in learning-based exposure/HDR reconstruction~\cite{rlunet2024overexposure,afifi2021exposurecorrection,lee2022hsvnet,eilertsen2017singlehdr}:
 \begin{equation}
 \mathcal{L}_{exp} = \|\text{ReLU}(I_{\text{pred}} - \tau_h)\|_2^2 + 
 \lambda_b \|M_b \odot (I_{\text{pred}} - I_{\text{gt}})\|_1
@@ -388,8 +384,35 @@ O. Ronneberger, P. Fischer, and T. Brox, ``U-Net: Convolutional Networks for Bio
 \bibitem{wang2004ssim}
 Z. Wang, A. C. Bovik, H. R. Sheikh, and E. P. Simoncelli, ``Image Quality Assessment: From Error Visibility to Structural Similarity,'' \textit{IEEE Trans. Image Process.}, vol. 13, no. 4, pp. 600--612, 2004.
 
-\bibitem{zhao2016loss}
-H. Zhao, O. Gallo, I. Frosio, and J. Kautz, ``Loss functions for image restoration with neural networks,'' \textit{IEEE Trans. Comput. Imaging}, vol. 3, no. 1, pp. 47--57, 2017. \url{https://arxiv.org/abs/1511.08861}
+\bibitem{isola2016pix2pix}
+P. Isola, J.-Y. Zhu, T. Zhou, and A. A. Efros, ``Image-to-Image Translation with Conditional Adversarial Networks,'' \textit{arXiv preprint arXiv:1611.07004}, 2016.
+
+\bibitem{ledig2016srgan}
+C. Ledig, L. Theis, F. Husz{\'a}r, J. Caballero, A. Cunningham, A. Acosta, A. Aitken, A. Tejani, J. Totz, Z. Wang, and W. Shi, ``Photo-Realistic Single Image Super-Resolution Using a Generative Adversarial Network,'' \textit{arXiv preprint arXiv:1609.04802}, 2016.
+
+\bibitem{zhang2018lpips}
+R. Zhang, P. Isola, A. A. Efros, E. Shechtman, and O. Wang, ``The Unreasonable Effectiveness of Deep Features as a Perceptual Metric,'' in \textit{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2018.
+
+\bibitem{simonyan2014vgg}
+K. Simonyan and A. Zisserman, ``Very Deep Convolutional Networks for Large-Scale Image Recognition,'' \textit{arXiv preprint arXiv:1409.1556}, 2014.
+
+\bibitem{park2023dualcolor}
+P. Park, H. Oh, and H. Kim, ``Dual-color space network with global priors for photo retouching,'' \textit{Scientific Reports}, vol. 13, Art. no. 19798, 2023, doi: 10.1038/s41598-023-47186-6.
+
+\bibitem{edrnet2025edgematching}
+F. Sun, B. Li, and Q. Zhang, ``EDRNet: Edge-Enhanced Dynamic Routing Adaptive for Depth Completion,'' \textit{Mathematics}, vol. 13, no. 6, Art. no. 953, 2025, doi: 10.3390/math13060953.
+
+\bibitem{rlunet2024overexposure}
+Y. Zheng, W. Wang, X. Wang, and X. Yuan, ``RLUNet: Overexposure-Content-Recovery-Based Single HDR Image Reconstruction with the Imaging Pipeline Principle,'' \textit{Applied Sciences}, vol. 14, no. 23, Art. no. 11289, 2024, doi: 10.3390/app142311289.
+
+\bibitem{afifi2021exposurecorrection}
+M. Afifi, K. G. Derpanis, B. Ommer, and M. S. Brown, ``Learning Multi-Scale Photo Exposure Correction,'' in \textit{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2021. \url{https://arxiv.org/abs/2003.11596}
+
+\bibitem{lee2022hsvnet}
+M. J. Lee, C.-h. Rhee, and C. H. Lee, ``HSVNet: Reconstructing HDR Image from a Single Exposure LDR Image with CNN,'' \textit{Applied Sciences}, vol. 12, no. 5, Art. no. 2370, 2022, doi: 10.3390/app12052370.
+
+\bibitem{eilertsen2017singlehdr}
+G. Eilertsen, J. Kronander, G. Denes, R. K. Mantiuk, and J. Unger, ``HDR image reconstruction from a single exposure using deep CNNs,'' \textit{ACM Trans. Graph.}, vol. 36, no. 6, Art. no. 178, 2017, doi: 10.1145/3130800.3130816.
 
 \end{thebibliography}
 
