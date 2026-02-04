@@ -25,7 +25,7 @@
 % ABSTRACT
 % ----------------------------------------------------------------
 \begin{abstract}
-Low-light image enhancement is essential for downstream computer vision tasks including autonomous driving, surveillance, and semantic segmentation. Conventional methods often struggle with non-uniform illumination, leading to overexposure, color distortion, and texture loss. To address these limitations, we propose SwinLLIE (Swin Transformer for Low-Light Image Enhancement), a novel architecture that combines the efficiency of Swin Transformers with a U-Net encoder-decoder structure for multi-scale feature processing. Our method leverages window-based self-attention for computational efficiency while employing a hybrid loss function incorporating L1 reconstruction, VGG perceptual, color consistency, edge preservation, and exposure control losses. Experimental results on the LOL dataset demonstrate that SwinLLIE achieves a PSNR of 18.76 dB and SSIM of 0.92 with a compact model size of approximately 4.7M parameters. The proposed architecture effectively balances brightness enhancement with structural preservation, producing visually coherent and perceptually enhanced results.
+Low-light image enhancement is essential for downstream computer vision tasks including autonomous driving, surveillance, and semantic segmentation. Conventional methods often struggle with non-uniform illumination, leading to overexposure, color distortion, and texture loss. To address these limitations, we propose SwinLLIE (Swin Transformer for Low-Light Image Enhancement), a novel architecture that combines the efficiency of Swin Transformers with a U-Net encoder-decoder structure for multi-scale feature processing. Our method leverages window-based self-attention for computational efficiency while employing a hybrid loss function incorporating L1 reconstruction, VGG perceptual, color consistency, edge preservation, and exposure control losses. Experimental results on the LOL dataset demonstrate that SwinLLIE achieves a PSNR of 18.66 dB and SSIM of 0.84 with a compact model size of approximately 4.7M parameters. The proposed architecture effectively balances brightness enhancement with structural preservation, producing visually coherent and perceptually enhanced results.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -259,13 +259,13 @@ EnlightenGAN (EG) & 18.23 & 0.617 \\
 LCDR & 18.57 & 0.641 \\
 A3DLUT & 18.19 & 0.745 \\
 \midrule
-\textbf{SwinLLIE (Ours)} & \textbf{18.76} & \textbf{0.923} \\
+\textbf{SwinLLIE (Ours)} & \textbf{18.66} & \textbf{0.840} \\
 \bottomrule
 \end{tabular}
 \label{tab:results}
 \end{table}
 
-SwinLLIE achieves +0.39 dB PSNR improvement over RetinexNet and outperforms recent methods like A3DLUT and EnlightenGAN, demonstrating the effectiveness of our Swin Transformer-based approach.
+SwinLLIE achieves +0.29 dB PSNR improvement over RetinexNet and outperforms recent methods like A3DLUT and EnlightenGAN, demonstrating the effectiveness of our Swin Transformer-based approach.
 
 \subsection{Qualitative Analysis}
 
@@ -294,7 +294,7 @@ The hybrid loss function combining L1, VGG perceptual, color consistency, edge p
 % ----------------------------------------------------------------
 \section{Conclusion}
 
-This paper presents SwinLLIE, a novel Swin Transformer-based method for low-light image enhancement. Through leveraging multi-scale features via a U-Net encoder-decoder architecture with RSTB blocks, the method achieves a PSNR of 18.76 dB and SSIM of 0.92 on the LOL dataset while maintaining a compact model size of approximately 4.7M parameters. 
+This paper presents SwinLLIE, a novel Swin Transformer-based method for low-light image enhancement. Through leveraging multi-scale features via a U-Net encoder-decoder architecture with RSTB blocks, the method achieves a PSNR of 18.66 dB and SSIM of 0.84 on the LOL dataset while maintaining a compact model size of approximately 4.7M parameters. 
 
 The window-based self-attention mechanism provides reduced computational complexity~\cite{liu2021swin}, making the model suitable for practical applications. The hybrid loss function effectively balances reconstruction accuracy with perceptual quality, preventing common issues such as color shifts and overexposure. Future works include further optimizing for edge-device integration, exploring unsupervised training paradigms, and extending the approach to video enhancement.
 

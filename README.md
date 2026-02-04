@@ -125,8 +125,8 @@ Evaluated on LOL Dataset (eval15):
 
 | Metric | SwinLLIE | RetinexNet | EnlightenGAN |
 |--------|----------|------------|--------------|
-| **PSNR** | **18.96 dB** | 16.77 dB | 17.48 dB |
-| **SSIM** | **0.78** | 0.56 | 0.65 |
+| **PSNR** | **18.66 dB** | 16.77 dB | 17.48 dB |
+| **SSIM** | **0.84** | 0.56 | 0.65 |
 
 ---
 

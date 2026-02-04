@@ -27,7 +27,7 @@ Visual results and comparisons for the SwinLLIE model.
 | RetinexNet | ![retinex](images/retinex.png) | 16.77 | 0.462 |
 | EnlightenGAN | ![enlighten](images/enlighten.png) | 17.48 | 0.651 |
 | Zero-DCE | ![zerodce](images/zerodce.png) | 14.86 | 0.589 |
-| **SwinLLIE (Ours)** | ![swinllie](images/swinllie.png) | **23.50** | **0.845** |
+| **SwinLLIE (Ours)** | ![swinllie](images/swinllie.png) | **18.66** | **0.840** |
 | Ground Truth | ![gt](images/gt.png) | ∞ | 1.0 |
 
 ---
