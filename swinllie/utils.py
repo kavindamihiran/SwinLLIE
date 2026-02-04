@@ -7,11 +7,15 @@ import random
 import numpy as np
 import torch
 import yaml
+from skimage.metrics import structural_similarity, peak_signal_noise_ratio
 
 
 def calculate_psnr(img1, img2, crop_border=0):
     """
-    Calculate PSNR between two images.
+    Calculate PSNR between two images (industry standard).
+    
+    Uses scikit-image's peak_signal_noise_ratio which follows the standard formula:
+    PSNR = 10 * log10(data_range^2 / MSE)
     
     Args:
         img1, img2: Images as numpy arrays (H, W, C) in range [0, 1] or [0, 255]
@@ -26,58 +30,80 @@ def calculate_psnr(img1, img2, crop_border=0):
         img1 = img1[crop_border:-crop_border, crop_border:-crop_border, ...]
         img2 = img2[crop_border:-crop_border, crop_border:-crop_border, ...]
     
-    # Ensure float type
     img1 = img1.astype(np.float64)
     img2 = img2.astype(np.float64)
     
-    mse = np.mean((img1 - img2) ** 2)
-    if mse == 0:
-        return float('inf')
+    # Determine data range: if max value > 1.0, assume [0, 255] range
+    # This is consistent with how most papers handle it
+    data_range = 255.0 if (img1.max() > 1.0 or img2.max() > 1.0) else 1.0
     
-    # Determine max value
-    max_val = 255.0 if img1.max() > 1.0 else 1.0
-    return 20 * np.log10(max_val / np.sqrt(mse))
+    return peak_signal_noise_ratio(img1, img2, data_range=data_range)
 
 
 def calculate_ssim(img1, img2, crop_border=0):
     """
-    Calculate SSIM between two images (simplified version).
+    Calculate SSIM between two images (industry standard).
+    
+    Uses scikit-image's structural_similarity with:
+    - 11x11 window size (standard from original SSIM paper)
+    - Gaussian weighting (as specified in Wang et al. 2004)
+    - Proper data range handling
+    
+    Reference: Wang, Z., Bovik, A.C., Sheikh, H.R., Simoncelli, E.P. (2004)
+    "Image Quality Assessment: From Error Visibility to Structural Similarity"
     
     Args:
-        img1, img2: Images as numpy arrays (H, W, C)
+        img1, img2: Images as numpy arrays (H, W, C) in range [0, 1] or [0, 255]
         crop_border: Pixels to crop from border
     
     Returns:
-        SSIM value between 0 and 1
+        SSIM value between -1 and 1 (typically 0 to 1 for similar images)
     """
-    assert img1.shape == img2.shape
+    assert img1.shape == img2.shape, f"Shape mismatch: {img1.shape} vs {img2.shape}"
     
     if crop_border > 0:
         img1 = img1[crop_border:-crop_border, crop_border:-crop_border, ...]
         img2 = img2[crop_border:-crop_border, crop_border:-crop_border, ...]
     
-    # Constants for numerical stability
-    C1 = (0.01 * 255) ** 2
-    C2 = (0.03 * 255) ** 2
-    
     img1 = img1.astype(np.float64)
     img2 = img2.astype(np.float64)
     
-    # If RGB, convert to grayscale for SSIM
+    # Consistent data range detection with PSNR
+    data_range = 255.0 if (img1.max() > 1.0 or img2.max() > 1.0) else 1.0
+    
+    # Industry standard SSIM parameters:
+    # - win_size=11: 11x11 window (from original paper)
+    # - gaussian_weights=True: Gaussian weighting (from original paper)
+    # - sigma=1.5: Standard deviation for Gaussian (from original paper)
+    # - K1=0.01, K2=0.03: Stability constants (from original paper)
     if len(img1.shape) == 3 and img1.shape[2] == 3:
-        img1 = 0.299 * img1[:,:,0] + 0.587 * img1[:,:,1] + 0.114 * img1[:,:,2]
-        img2 = 0.299 * img2[:,:,0] + 0.587 * img2[:,:,1] + 0.114 * img2[:,:,2]
+        # For RGB images - compute SSIM per channel and average
+        ssim_value = structural_similarity(
+            img1, img2, 
+            data_range=data_range,
+            channel_axis=2,
+            win_size=11,
+            gaussian_weights=True,
+            sigma=1.5,
+            K1=0.01,
+            K2=0.03
+        )
+    else:
+        # For grayscale images
+        if len(img1.shape) == 3:
+            img1 = img1.squeeze()
+            img2 = img2.squeeze()
+        ssim_value = structural_similarity(
+            img1, img2, 
+            data_range=data_range,
+            win_size=11,
+            gaussian_weights=True,
+            sigma=1.5,
+            K1=0.01,
+            K2=0.03
+        )
     
-    mu1 = img1.mean()
-    mu2 = img2.mean()
-    sigma1_sq = ((img1 - mu1) ** 2).mean()
-    sigma2_sq = ((img2 - mu2) ** 2).mean()
-    sigma12 = ((img1 - mu1) * (img2 - mu2)).mean()
-    
-    ssim = ((2 * mu1 * mu2 + C1) * (2 * sigma12 + C2)) / \
-           ((mu1 ** 2 + mu2 ** 2 + C1) * (sigma1_sq + sigma2_sq + C2))
-    
-    return ssim
+    return ssim_value
 
 
 def set_seed(seed=42):
