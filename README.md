@@ -112,10 +112,21 @@ Input → Conv First → Swin Encoder → Swin Decoder → Output
 | L1       | 1.0    | Main reconstruction                |
 | VGG      | 0.1    | Perceptual quality (prevents blur) |
 | Color    | 0.5    | Color preservation                 |
-| Edge     | 0.5    | Sharpness                          |
-| Exposure | 0.5    | Prevent overexposure               |
+| Edge     | 1.0    | Sharpness                          |
+| Exposure | 1.0    | Prevent overexposure               |
 
 Optional: Smoothness (0.01), SSIM (0.1)
+
+---
+
+## 📈 Performance (Verified)
+
+Evaluated on LOL Dataset (eval15):
+
+| Metric | SwinLLIE | RetinexNet | EnlightenGAN |
+|--------|----------|------------|--------------|
+| **PSNR** | **18.96 dB** | 16.77 dB | 17.48 dB |
+| **SSIM** | **0.78** | 0.56 | 0.65 |
 
 ---
 
@@ -131,7 +142,7 @@ model:
   window_size: 8
 
 training:
-  batch_size: 4
+  batch_size: 8
   epochs: 100
   learning_rate: 0.0002
   use_amp: true # Mixed precision
@@ -140,8 +151,8 @@ loss:
   lambda_l1: 1.0
   lambda_vgg: 0.1
   lambda_color: 0.5
-  lambda_edge: 0.5
-  lambda_exposure: 0.5
+  lambda_edge: 1.0
+  lambda_exposure: 1.0
 ```
 
 ---
@@ -171,10 +182,10 @@ loss:
 ## 📝 Citation
 
 ```bibtex
-@article{swinllie2025,
+@article{swinllie2026,
   title={SwinLLIE: Swin Transformer for Low-Light Image Enhancement},
-  author={Group 10},
-  year={2025}
+  author={Mihiran, Kavinda},
+  year={2026}
 }
 ```
 

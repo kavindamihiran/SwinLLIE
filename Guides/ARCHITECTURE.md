@@ -233,13 +233,13 @@ out = conv_last(conv_after(dec1) + shallow) + x  # (1, 3, 128, 128)
 
 ## Memory Usage
 
-### Training (batch_size=4, patch_size=96)
+### Training (batch_size=8, patch_size=96)
 
-| GPU VRAM | Recommended Config    |
-| -------- | --------------------- |
-| 4 GB     | batch=1, embed_dim=48 |
-| 8 GB     | batch=4, embed_dim=60 |
-| 12 GB    | batch=8, embed_dim=96 |
+| GPU VRAM | Recommended Config |
+| -------- | ------------------ |
+| 4 GB     | batch=4, embed_dim=48 |
+| 8 GB     | batch=8, embed_dim=60 |
+| 12 GB    | batch=16, embed_dim=60 |
 
 ### Inference
 

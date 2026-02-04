@@ -43,7 +43,7 @@ print(f"Loaded from epoch {checkpoint.get('epoch', 'unknown')}")
 training:
   learning_rate: 0.00002 # 10x LOWER than training from scratch!
   epochs: 50 # Fewer epochs needed
-  batch_size: 4
+  batch_size: 8
 
 dataset:
   root_dir: "./datasets/your_custom_data"
@@ -122,8 +122,8 @@ learning_rate: 0.00002  # 2e-5
 lambda_l1: 1.0
 lambda_vgg: 0.1
 lambda_color: 0.5
-lambda_edge: 0.5
-lambda_exposure: 0.5
+lambda_edge: 1.0
+lambda_exposure: 1.0
 
 # Sharper outputs
 lambda_edge: 1.0       # Increase edge weight
@@ -294,7 +294,7 @@ dataset:
   num_workers: 4
 
 training:
-  batch_size: 4
+  batch_size: 8
   epochs: 50
   learning_rate: 0.00002 # Fine-tuning LR
   weight_decay: 0.0001
@@ -306,8 +306,8 @@ loss:
   lambda_l1: 1.0
   lambda_vgg: 0.1
   lambda_color: 0.5
-  lambda_edge: 0.5
-  lambda_exposure: 0.5
+  lambda_edge: 1.0
+  lambda_exposure: 1.0
 
 resume:
   enabled: true

@@ -207,7 +207,7 @@ Color = mean(|mean_color(pred) - mean_color(target)|)
 Edge = mean(|sobel(pred) - sobel(target)|)
 ```
 
-- **Weight**: 0.5
+- **Weight**: 1.0
 - **Purpose**: Preserve sharp edges
 - **Effect**: Clear boundaries, no blur
 
@@ -217,14 +217,14 @@ Edge = mean(|sobel(pred) - sobel(target)|)
 Exposure = mean(ReLU(pred - 0.95)²) + preserve_bright_regions
 ```
 
-- **Weight**: 0.5
+- **Weight**: 1.0
 - **Purpose**: Prevent overexposure
 - **Effect**: No blown-out highlights
 
 ### Total Loss
 
 ```python
-Total = 1.0×L1 + 0.1×VGG + 0.5×Color + 0.5×Edge + 0.5×Exposure
+Total = 1.0×L1 + 0.1×VGG + 0.5×Color + 1.0×Edge + 1.0×Exposure
 ```
 
 ---
@@ -241,7 +241,7 @@ model:
   window_size: 8
 
 training:
-  batch_size: 4
+  batch_size: 8
   learning_rate: 0.0002
   epochs: 100
   patch_size: 96

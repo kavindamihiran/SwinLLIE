@@ -85,8 +85,8 @@ class HybridLoss(nn.Module):
         lambda_l1 (float): L1 loss weight. Default: 1.0
         lambda_vgg (float): VGG perceptual loss weight. Default: 0.1
         lambda_color (float): Color consistency loss weight. Default: 0.5
-        lambda_edge (float): Edge loss weight. Default: 0.5
-        lambda_exposure (float): Exposure control loss weight. Default: 0.5
+        lambda_edge (float): Edge loss weight. Default: 1.0
+        lambda_exposure (float): Exposure control loss weight. Default: 1.0
         use_ssim (bool): Include SSIM loss. Default: False
         lambda_ssim (float): SSIM loss weight. Default: 0.1
     
@@ -238,7 +238,7 @@ criterion = HybridLoss()
 optimizer = torch.optim.AdamW(model.parameters(), lr=2e-4)
 
 dataset = LOLDataset('datasets/LOL', split='train')
-loader = DataLoader(dataset, batch_size=4, shuffle=True)
+loader = DataLoader(dataset, batch_size=8, shuffle=True)
 
 # Training loop
 for epoch in range(100):
