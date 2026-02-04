@@ -43,7 +43,7 @@ Low-Light Enhancement, Swin Transformer, Image Restoration, Deep Learning, Multi
 
 Low-light image enhancement plays a crucial role in downstream computer vision applications such as autonomous driving, semantic segmentation, and security surveillance. Conventional enhancement methods often overlook non-uniform illumination handling, which leads to overexposure, detail loss, and texture degradation within the brightness distribution. To address these limitations, SwinLLIE (Swin Transformer for Low-Light Image Enhancement) is proposed with a novel hybrid CNN-Transformer architecture that leverages multi-scale spatial feature processing to achieve improved perceptual quality and structural integrity in enhanced low-light images.
 
-Unlike traditional methods that apply uniform brightness adjustments, SwinLLIE introduces a U-Net-based generator with Swin Transformer blocks for multi-scale feature extraction. The Swin Transformer architecture, originally designed for image classification, has demonstrated remarkable success in image restoration tasks due to its ability to capture both local and global dependencies through shifted window-based self-attention mechanisms~\cite{liu2021swin, liang2021swinir}.
+Unlike traditional methods that apply uniform brightness adjustments, SwinLLIE introduces a U-Net-based generator~\cite{ronneberger2015unet} with Swin Transformer blocks for multi-scale feature extraction. The Swin Transformer architecture, originally designed for image classification, has demonstrated remarkable success in image restoration tasks due to its ability to capture both local and global dependencies through shifted window-based self-attention mechanisms~\cite{liu2021swin, liang2021swinir}.
 
 The key contributions of this work are:
 \begin{itemize}
@@ -116,7 +116,9 @@ To enable cross-window connections, shifted window attention (SW-MSA) is alterna
 
 \subsection{Residual Swin Transformer Block (RSTB)}
 
-Each RSTB contains a stack of Swin Transformer blocks followed by a convolutional layer with a residual connection:
+\subsection{Residual Swin Transformer Block (RSTB)}
+
+Each RSTB, adopted from SwinIR~\cite{liang2021swinir}, contains a stack of Swin Transformer blocks followed by a convolutional layer with a residual connection:
 
 \begin{equation}
 \text{RSTB}(X) = \text{Conv}(\text{BasicLayer}(X)) + X
@@ -134,7 +136,9 @@ Y &= \text{MLP}(\text{LN}(Y')) + Y'
 
 \subsection{Feature Fusion for Skip Connections}
 
-To effectively combine encoder and decoder features, we employ a learnable fusion module:
+\subsection{Feature Fusion for Skip Connections}
+
+To effectively combine encoder and decoder features, we employ a learnable fusion module regarding the skip connections concept~\cite{ronneberger2015unet}:
 \begin{equation}
 F_{\text{fused}} = F_{\text{enc}} + F_{\text{dec}} + \text{Conv}([F_{\text{enc}}, F_{\text{dec}}])
 \end{equation}
@@ -149,7 +153,7 @@ where $[\cdot, \cdot]$ denotes concatenation along the channel dimension. This t
 We employ a hybrid loss function that balances reconstruction accuracy with perceptual quality:
 
 \subsection{L1 Reconstruction Loss}
-The primary reconstruction loss ensures pixel-level accuracy:
+The primary reconstruction loss~\cite{zhao2016loss} ensures pixel-level accuracy:
 \begin{equation}
 \mathcal{L}_{L1} = \mathbb{E}[\|I_{\text{pred}} - I_{\text{gt}}\|_1]
 \end{equation}
@@ -162,7 +166,7 @@ To preserve high-level features and textures, we compute the L2 distance in VGG1
 where $\phi_i$ represents features from pretrained VGG19.
 
 \subsection{Color Consistency Loss}
-To prevent color shifts, we compute per-pixel cosine similarity:
+To prevent color shifts, we adopt the color consistency loss from~\cite{guo2020zero} and compute per-pixel cosine similarity:
 \begin{equation}
 \mathcal{L}_{color} = 1 - \frac{1}{HW}\sum_{h=1}^{H}\sum_{w=1}^{W} 
 \frac{\mathbf{I}_{\text{pred}}(h,w) \cdot \mathbf{I}_{\text{gt}}(h,w)}
@@ -179,7 +183,7 @@ Using Sobel operators $S_x$ and $S_y$ for edge detection:
 where $E(I) = \sqrt{(S_x * I)^2 + (S_y * I)^2}$.
 
 \subsection{Exposure Control Loss}
-To prevent overexposure while preserving bright regions:
+To prevent overexposure while preserving bright regions, we utilize the exposure control loss~\cite{guo2020zero}:
 \begin{equation}
 \mathcal{L}_{exp} = \|\text{ReLU}(I_{\text{pred}} - \tau_h)\|_2^2 + 
 \lambda_b \|M_b \odot (I_{\text{pred}} - I_{\text{gt}})\|_1
@@ -294,7 +298,6 @@ Table~\ref{tab:efficiency} provides a parameter efficiency comparison among repr
 \textbf{Method} & \textbf{Params} & \textbf{PSNR} & \textbf{SSIM} \\
 \midrule
 RetinexNet & 0.84M & 18.37 & 0.723 \\
-Retinexformer & 1.61M & 25.16 & 0.855 \\
 \textbf{SwinLLIE (Ours)} & \textbf{4.7M} & 18.66 & 0.840 \\
 SNR-Net & 39.1M & 24.61 & 0.842 \\
 \bottomrule
@@ -384,6 +387,9 @@ O. Ronneberger, P. Fischer, and T. Brox, ``U-Net: Convolutional Networks for Bio
 
 \bibitem{wang2004ssim}
 Z. Wang, A. C. Bovik, H. R. Sheikh, and E. P. Simoncelli, ``Image Quality Assessment: From Error Visibility to Structural Similarity,'' \textit{IEEE Trans. Image Process.}, vol. 13, no. 4, pp. 600--612, 2004.
+
+\bibitem{zhao2016loss}
+H. Zhao, O. Gallo, I. Frosio, and J. Kautz, ``Loss functions for image restoration with neural networks,'' \textit{IEEE Trans. Comput. Imaging}, vol. 3, no. 1, pp. 47--57, 2017. \url{https://arxiv.org/abs/1511.08861}
 
 \end{thebibliography}
 
