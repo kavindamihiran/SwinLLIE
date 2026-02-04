@@ -370,4 +370,22 @@ swinllie/
 
 ---
 
+## 📝 Research Paper
+
+For a formal academic description of SwinLLIE, see:
+- **LaTeX Paper**: [RESEARCH_PAPER_SWINLLIE.tex](RESEARCH_PAPER_SWINLLIE.tex) (for Overleaf)
+
+### Citation
+
+```bibtex
+@article{swinllie2025,
+  title={SwinLLIE: Swin Transformer for Low-Light Image Enhancement},
+  author={Kavinda Mihiran},
+  year={2025}
+}
+```
+
+---
+
 **Happy Training! 🚀**
+

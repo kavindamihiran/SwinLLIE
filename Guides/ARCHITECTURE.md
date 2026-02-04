@@ -259,3 +259,27 @@ out = conv_last(conv_after(dec1) + shallow) + x  # (1, 3, 128, 128)
 | Loss         | L1               | Hybrid (L1+VGG+Color+Edge+Exposure) |
 | Parameters   | ~12M (large)     | ~4.7M (efficient)                   |
 | Training     | Patch-based      | Patch-based with data augmentation  |
+
+---
+
+## 📚 Related Documentation
+
+| Document | Description |
+|----------|-------------|
+| [THEORY_GUIDE.md](THEORY_GUIDE.md) | Beginner-friendly theory explanation |
+| [API_REFERENCE.md](API_REFERENCE.md) | Code API documentation |
+| [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) | Deployment instructions |
+| [RESEARCH_PAPER_SWINLLIE.tex](RESEARCH_PAPER_SWINLLIE.tex) | Academic paper (LaTeX) |
+
+---
+
+## 📝 Citation
+
+```bibtex
+@article{swinllie2025,
+  title={SwinLLIE: Swin Transformer for Low-Light Image Enhancement},
+  author={Kavinda Mihiran},
+  year={2025}
+}
+```
+
