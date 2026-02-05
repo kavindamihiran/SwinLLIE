@@ -303,19 +303,14 @@ SNR-Net & 39.1M & 24.61 & 0.842 \\
 
 \subsection{Qualitative Analysis}
 
-Fig.~\ref{fig:qualitative} demonstrates the visual enhancement results comparing SwinLLIE with baseline methods. The proposed method produces more natural brightness balance and improved texture detail retention, to maintain structural integrity.
+Fig.~\ref{fig:qualitative} demonstrates representative visual enhancement results of SwinLLIE on the LOL test set. The proposed method effectively recovers brightness and color information while preserving structural details.
 
 \begin{figure}[htbp]
-\centerline{\fbox{\parbox{0.45\textwidth}{\centering
-\textbf{[Qualitative Comparison Figure]}\\[10pt]
-\textit{Insert comparison images here showing:}\\
-(a) Input (Low-Light)\\
-(b) RetinexNet\\
-(c) EnlightenGAN\\
-(d) SwinLLIE (Ours)\\
-(e) Ground Truth
-}}}
-\caption{Qualitative comparison of SwinLLIE against existing methods on the LOL dataset. Proposed method produces more natural brightness balance and improved texture details in comparison to other methods.}
+\centering
+\includegraphics[width=\columnwidth]{qualitative_comparison_2.png}\\[2pt]
+\includegraphics[width=\columnwidth]{qualitative_comparison_7.png}\\[2pt]
+\includegraphics[width=\columnwidth]{qualitative_comparison_10.png}
+\caption{Qualitative results on LOL dataset. Each row shows (a) low-light input, (b) SwinLLIE output, (c) ground truth. The proposed method effectively recovers natural illumination and colors while preserving fine details.}
 \label{fig:qualitative}
 \end{figure}
 
