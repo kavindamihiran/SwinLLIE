@@ -73,34 +73,12 @@ Transformer-based approaches have recently emerged as powerful alternatives. The
 
 SwinLLIE enhances low-light images by utilizing multi-scale spatial feature extraction through a U-Net encoder-decoder architecture~\cite{ronneberger2015unet} powered by Swin Transformer blocks. The architecture consists of three main stages: shallow feature extraction, deep feature extraction through encoder-decoder processing, and image reconstruction.
 
-\begin{figure}[htbp]
-\centerline{\fbox{\parbox{0.45\textwidth}{\centering
-\textbf{SwinLLIE Architecture}\\[5pt]
-Input Image $(B, 3, H, W)$\\
-$\downarrow$\\
-Conv First (3$\times$3) $\rightarrow$ Shallow Features\\
-$\downarrow$\\
-\textbf{Encoder}\\
-RSTB Stage 1 (dim=60) $\rightarrow$ Skip 1\\
-$\downarrow$ Downsample 2$\times$\\
-RSTB Stage 2 (dim=120) $\rightarrow$ Skip 2\\
-$\downarrow$ Downsample 2$\times$\\
-RSTB Stage 3 (dim=240) [Bottleneck]\\
-$\downarrow$\\
-\textbf{Decoder}\\
-Upsample 2$\times$ + Fusion (Skip 2)\\
-RSTB Stage 2'\\
-$\downarrow$\\
-Upsample 2$\times$ + Fusion (Skip 1)\\
-RSTB Stage 1'\\
-$\downarrow$\\
-Conv After + Conv Last + Residual\\
-$\downarrow$\\
-Enhanced Output $(B, 3, H, W)$
-}}}
-\caption{High-level architecture of SwinLLIE. The generator follows an encoder-decoder structure with RSTB (Residual Swin Transformer Block) stages at multiple scales with skip connections for detail preservation.}
+\begin{figure*}[htbp]
+\centering
+\includegraphics[width=\textwidth]{archi.png}
+\caption{Overall architecture of SwinLLIE. The network follows a U-shaped encoder-decoder structure with RSTB (Residual Swin Transformer Block) stages at three scales (dim=60, 120, 240). Skip connections with feature fusion modules preserve fine details. The right panel shows the internal structure of an RSTB block: a BasicLayer containing four alternating W-MSA (Window Multi-head Self-Attention) and SW-MSA (Shifted Window MSA) blocks, followed by a 3×3 convolution with residual connection.}
 \label{fig:architecture}
-\end{figure}
+\end{figure*}
 
 \subsection{Window-based Self-Attention}
 
