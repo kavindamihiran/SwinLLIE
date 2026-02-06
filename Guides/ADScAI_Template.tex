@@ -48,13 +48,13 @@
 %% other information printed in the page headers. This command allows
 %% the author to define a more concise list
 %% of authors' names for this purpose.
-\renewcommand{\shortauthors}{Author One et al.}
+\renewcommand{\shortauthors}{}
 
 %%
 %% The abstract is a short summary of the work to be presented in the
 %% article.
 \begin{abstract}
-Low-light image enhancement(LLIE) is essential for downstream computer vision tasks including autonomous driving, surveillance, and semantic segmentation. Conventional techniques often struggle with non-uniform illumination, resulting in texture loss, color distortion, and overexposure. To mitigate these limitations, we propose SwinLLIE (Swin Transformer for Low-Light Image Enhancement), a novel architecture that combines the efficiency of Swin Transformers with a U-Net encoder-decoder structure for multi-scale feature processing. Proposed method leverages window-based self-attention for computational efficiency while employing a hybrid loss functions incorporating L1 reconstruction, VGG perceptual, color consistency, edge preservation, and exposure control losses. Experimental results on the LOL dataset demonstrate that SwinLLIE achieves a PSNR of 18.66 dB and SSIM of 0.84 with a compact model size of approximately 4.7M parameters. The proposed architecture effectively balances brightness enhancement with structural preservation, producing visually coherent and perceptually enhanced results.
+Low-light image enhancement(LLIE) is essential for downstream computer vision tasks including autonomous driving, surveillance, and semantic segmentation. Conventional techniques often struggle with non-uniform illumination, resulting in texture loss, color distortion, and overexposure. To mitigate these limitations, we propose SwinLLIE (Swin Transformer for Low-Light Image Enhancement), a novel architecture that combines the efficiency of Swin Transformers with a U-Net encoder-decoder structure for multi-scale feature processing. Proposed method utilizes window-based self-attention for computational efficiency while employing a hybrid loss functions incorporating L1 reconstruction, VGG perceptual, color consistency, edge preservation, and exposure control losses. Experimental results on the LOL dataset demonstrate that SwinLLIE attains a PSNR of 18.66 dB and SSIM of 0.84 with a compact model size of approximately 4.7M parameters. The proposed architecture effectively balances brightness enhancement with structural preservation, producing visually coherent and perceptually enhanced results.
 \end{abstract}
 
 %%
@@ -69,7 +69,7 @@ Low-light image enhancement(LLIE) is essential for downstream computer vision ta
 
 \section{Introduction}
 
-Low-light image enhancement plays a crucial role in downstream computer vision applications such as autonomous driving, semantic segmentation, and security surveillance. Conventional enhancement methods often overlook non-uniform illumination handling, which leads to overexposure, detail loss, and texture degradation within the brightness distribution. To mitigate these limitations, SwinLLIE (Swin Transformer for Low-Light Image Enhancement) is proposed with a novel hybrid CNN-Transformer architecture that leverages multi-scale spatial feature learning to deliver improved perceptual quality and structural integrity in enhanced low-light images.
+Enhancing low-light images plays a crucial role in downstream computer vision applications such as autonomous driving, semantic segmentation, and security surveillance. Conventional enhancement methods often overlook non-uniform illumination handling, which leads to overexposure, detail loss, and texture degradation within the brightness distribution. To mitigate these limitations, SwinLLIE (Swin Transformer for Low-Light Image Enhancement) is proposed with a novel hybrid CNN-Transformer architecture that leverages multi-scale spatial feature learning to deliver improved perceptual quality and structural integrity in enhanced low-light images.
 
 In contrast to conventional techniques that apply uniform brightness adjustments, SwinLLIE introduces a U-Net-based generator~\cite{ronneberger2015unet} with Swin Transformer blocks for multi-scale feature extraction. The Swin Transformer architecture, originally designed for image classification, has shown strong performance in image restoration tasks due to its ability to capture both local and global dependencies through shifted window-based self-attention mechanisms~\cite{liu2021swin, liang2021swinir}.
 
