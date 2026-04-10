@@ -1,6 +1,5 @@
 \documentclass[conference]{IEEEtran}
-\IEEEoverridecommandlockouts
-% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+% Double-blind submission: No author information included
 \usepackage{cite}
 \usepackage{amsmath,amssymb,amsfonts}
 \usepackage{algorithmic}
@@ -16,43 +15,6 @@
 \begin{document}
 
 \title{SwinLLIE: Swin Transformer for Low-Light Image Enhancement with Multi-Scale Processing}
-
-\author{\IEEEauthorblockN{1\textsuperscript{st} Given Name Surname}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{name of organization (of Aff.)}\\
-City, Country \\
-email address or ORCID}
-\and
-\IEEEauthorblockN{2\textsuperscript{nd} Given Name Surname}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{name of organization (of Aff.)}\\
-City, Country \\
-email address or ORCID}
-\and
-\IEEEauthorblockN{3\textsuperscript{rd} Given Name Surname}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{name of organization (of Aff.)}\\
-City, Country \\
-email address or ORCID}
-\and
-\IEEEauthorblockN{4\textsuperscript{th} Given Name Surname}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{name of organization (of Aff.)}\\
-City, Country \\
-email address or ORCID}
-\and
-\IEEEauthorblockN{5\textsuperscript{th} Given Name Surname}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{name of organization (of Aff.)}\\
-City, Country \\
-email address or ORCID}
-\and
-\IEEEauthorblockN{6\textsuperscript{th} Given Name Surname}
-\IEEEauthorblockA{\textit{dept. name of organization (of Aff.)} \\
-\textit{name of organization (of Aff.)}\\
-City, Country \\
-email address or ORCID}
-}
 
 \maketitle
 
@@ -294,7 +256,7 @@ LLFormer~\cite{wang2023llformer} & 23.65 & 0.820 \\
 SNR-Net~\cite{xu2022snrnet} & 24.61 & 0.842 \\
 Retinexformer~\cite{cai2023retinexformer} & 25.16 & 0.855 \\
 \midrule
-\textbf{SwinLLIE (Ours, 4.7M params)} & 18.66 & 0.840 \\
+\textbf{SwinLLIE (Proposed, 4.7M params)} & 18.66 & 0.840 \\
 \bottomrule
 \end{tabular}
 \label{tab:results}
@@ -312,7 +274,7 @@ Table~\ref{tab:efficiency} provides a parameter efficiency comparison among repr
 \textbf{Method} & \textbf{Params} & \textbf{PSNR} & \textbf{SSIM} \\
 \midrule
 RetinexNet & 0.84M & 18.37 & 0.723 \\
-\textbf{SwinLLIE (Ours)} & \textbf{4.7M} & 18.66 & 0.840 \\
+\textbf{SwinLLIE (Proposed)} & \textbf{4.7M} & 18.66 & 0.840 \\
 SNR-Net & 39.1M & 24.61 & 0.842 \\
 \bottomrule
 \end{tabular}
