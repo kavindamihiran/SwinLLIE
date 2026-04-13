@@ -48,6 +48,8 @@ Generative Adversarial Network(GAN) based methods such as EnlightenGAN and Zero-
 
 More recently, transformer based approaches have recently emerged as powerful alternatives. The Swin Transformer~\cite{liu2021swin} introduced hierarchical feature maps and shifted window based attention, allowing efficient computation for high resolution images. SwinIR~\cite{liang2021swinir} adapted this to image restoration tasks, demonstrating state-of-the-art performance in super resolution and denoising. However, directly applying such architectures to low light enhancement requires architectural modifications to handle the unique challenges of illumination variation.
 
+Building on this direction, hybrid U-Net and Swin Transformer architectures have been explored for image restoration. LLU-Swin~\cite{shao2022lluswin} proposed a U-shaped Swin Transformer network that incorporates dilated convolutions into Swin Transformer blocks to expand the local receptive field, aiming to better capture contextual information for low-light image enhancement. While this approach strengthens local feature extraction, the structural modifications to the transformer blocks introduce additional computational overhead and do not explicitly address the mathematical constraints of illumination variation such as overexposure and color degradation. In contrast, the proposed SwinLLIE retains the standard, unmodified RSTB blocks from SwinIR~\cite{liang2021swinir} to preserve computational efficiency (approximately 4.7M parameters), and instead addresses low-light specific challenges through a learnable skip-connection fusion module and a comprehensive five-component hybrid loss function that explicitly constrains overexposure and color distortion during training.
+
 \section{Proposed SwinLLIE Enhancement Method}
 
 \subsection{Architecture Overview}
@@ -364,6 +366,9 @@ M. J. Lee, C.-h. Rhee, and C. H. Lee, ``HSVNet: Reconstructing HDR Image from a 
 
 \bibitem{eilertsen2017singlehdr}
 G. Eilertsen, J. Kronander, G. Denes, R. K. Mantiuk, and J. Unger, ``HDR image reconstruction from a single exposure using deep CNNs,'' \textit{ACM Trans. Graph.}, vol. 36, no. 6, Art. no. 178, 2017.
+
+\bibitem{shao2022lluswin}
+L. Shao, W. Wang, S. Huang, and X. Li, ``LLU-Swin: Low-Light Image Enhancement with U-shaped Swin Transformer,'' in \textit{Proc. IEEE Int. Conf. Big Data}, Osaka, Japan, pp. 1134--1141, 2022, doi: 10.1109/BigData55660.2022.10021069.
 
 \end{thebibliography}
 
