@@ -2,11 +2,17 @@ import torch
 import os
 import sys
 import numpy as np
+import argparse
 from swinllie import SwinLLIE, get_dataloader
 from swinllie.utils import calculate_psnr, calculate_ssim
 
 def check_metrics():
-    checkpoint_path = './experiments/test_run/checkpoints/best.pth'
+    parser = argparse.ArgumentParser(description='Evaluate Swin-LLIE metrics')
+    parser.add_argument('--weights', type=str, default='./experiments/test_run/checkpoints/best.pth', help='Path to checkpoint')
+    parser.add_argument('--dataset', type=str, default='./datasets/LOL', help='Path to dataset root')
+    args = parser.parse_args()
+
+    checkpoint_path = args.weights
     if not os.path.exists(checkpoint_path):
         print(f"Error: Checkpoint not found at {checkpoint_path}")
         return
@@ -26,7 +32,7 @@ def check_metrics():
         return
 
     # Check for test dataset
-    dataset_path = './datasets/LOL'
+    dataset_path = args.dataset
     if not os.path.exists(dataset_path):
         print(f"Dataset path {dataset_path} not found. Skipping full evaluation.")
         return

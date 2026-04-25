@@ -9,6 +9,7 @@ A clean implementation of SwinIR (Swin Transformer for Image Restoration) specif
 - **Multi-scale Processing**: Encoder-decoder with skip connections
 - **Smart GPU/CPU Fallback**: Automatic detection with seamless fallback
 - **~4M Parameters**: Efficient for training and inference
+- **Flexible Evaluation**: Supports custom datasets (LOL-v2), GFLOPs/FPS profiling, and Ablation studies
 
 ---
 
@@ -30,7 +31,9 @@ SwinIR/
 │   ├── ARCHITECTURE.md       # Model architecture details
 │   └── FINE_TUNING_GUIDE.md  # Fine-tuning instructions
 ├── train.py                  # Training script
-└── inference.py              # Inference script
+├── inference.py              # Inference script
+├── check_metrics.py          # PSNR & SSIM evaluation script
+└── reviewer_revisions.md     # Guidelines for manuscript updates
 ```
 
 ---
@@ -61,12 +64,14 @@ python swinllie/losses.py   # Run loss tests
 python train.py --config configs/swinllie_lol.yaml
 ```
 
-### 4. Inference
+### 4. Inference & Evaluation
 
 ```bash
-# Put images in test/ folder
-python inference.py
-# Results in test_results/
+# Run inference on any folder
+python inference.py --input ./test --output ./test_results --weights ./experiments/test_run/checkpoints/best.pth
+
+# Evaluate PSNR/SSIM against Ground Truth (e.g., LOL or LOL-v2)
+python check_metrics.py --dataset ./datasets/LOL --weights ./experiments/test_run/checkpoints/best.pth
 ```
 
 ---
@@ -127,6 +132,8 @@ Evaluated on LOL Dataset (eval15):
 |--------|----------|------------|--------------|
 | **PSNR** | **18.66 dB** | 16.77 dB | 17.48 dB |
 | **SSIM** | **0.84** | 0.56 | 0.65 |
+
+*Note: For testing on generalized real-world datasets like LOL-v2 and producing efficiency metrics (GFLOPs/FPS), see the integrated `swinir.ipynb` pipeline.*
 
 ---
 

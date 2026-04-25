@@ -7,11 +7,23 @@ import numpy as np
 from PIL import Image
 from swinllie import SwinLLIE
 
-# Config
-CHECKPOINT = './experiments/test_run/checkpoints/best.pth'
-INPUT_DIR = './test'
-OUTPUT_DIR = './test_results'
+import argparse
+
+# Config defaults
+CHECKPOINT_DEFAULT = './experiments/test_run/checkpoints/best.pth'
+INPUT_DIR_DEFAULT = './test'
+OUTPUT_DIR_DEFAULT = './test_results'
 WINDOW_SIZE = 8
+
+parser = argparse.ArgumentParser(description='Inference script for Swin-LLIE')
+parser.add_argument('--input', type=str, default=INPUT_DIR_DEFAULT, help='Input directory')
+parser.add_argument('--output', type=str, default=OUTPUT_DIR_DEFAULT, help='Output directory')
+parser.add_argument('--weights', type=str, default=CHECKPOINT_DEFAULT, help='Model weights path')
+args = parser.parse_args()
+
+CHECKPOINT = args.weights
+INPUT_DIR = args.input
+OUTPUT_DIR = args.output
 
 def process_image(model, x, device):
     """Process image on specified device."""
