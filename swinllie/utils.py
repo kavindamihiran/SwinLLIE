@@ -227,7 +227,7 @@ def save_checkpoint(model, optimizer, scheduler, scaler, epoch, best_psnr, save_
 
 def load_checkpoint(checkpoint_path, model, optimizer=None, scheduler=None, scaler=None):
     """Load training checkpoint."""
-    checkpoint = torch.load(checkpoint_path, map_location='cpu')
+    checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
     model.load_state_dict(checkpoint['model_state_dict'])
     
     if optimizer and checkpoint.get('optimizer_state_dict'):

@@ -19,7 +19,8 @@ def check_metrics():
 
     print(f"Loading checkpoint from {checkpoint_path}...")
     try:
-        checkpoint = torch.load(checkpoint_path, map_location='cpu')
+        # weights_only=False is required for PyTorch 2.6+ compatibility when loading custom metadata
+        checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
         print("Checkpoint Loaded Successfully.")
         print("-" * 30)
         print(f"Epoch: {checkpoint.get('epoch', 'N/A')}")

@@ -186,7 +186,7 @@ if __name__ == '__main__':
     # Resume training if enabled
     start_epoch = 0
     if resume_cfg.get('enabled', False) and os.path.exists(resume_cfg.get('checkpoint_path', '')):
-        checkpoint = torch.load(resume_cfg['checkpoint_path'], map_location=device)
+        checkpoint = torch.load(resume_cfg['checkpoint_path'], map_location=device, weights_only=False)
         # Handle both DataParallel and non-DataParallel checkpoints
         state_dict = checkpoint['model_state_dict']
         if num_gpus > 1 and not any(k.startswith('module.') for k in state_dict.keys()):
