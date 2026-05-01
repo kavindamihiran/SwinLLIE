@@ -21,7 +21,7 @@ WINDOW_SIZE = 8
 
 # --- Configuration ---
 # Pick 2 representative test images for the figure (2 rows)
-TEST_IMAGES = ['23.png', '778.png']
+TEST_IMAGES = ['55.png', '778.png']
 LOW_DIR = './datasets/LOL/eval15/low'
 HIGH_DIR = './datasets/LOL/eval15/high'
 
