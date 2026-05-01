@@ -55,7 +55,7 @@ The key contributions of this work are:
 
 Recent deep learning approaches have shown significant advancements over classical methods like histogram equalization and Retinex~\cite{land1977retinex}. CNN-based models such as LLNet~\cite{lore2017llnet} and Retinex-Net enhance brightness but often produce oversmoothing. GAN-based methods like EnlightenGAN~\cite{jiang2021enlightengan} use perceptual enhancement but struggle with intricate details in challenging lighting conditions.
 
-More recently, transformer-based approaches have emerged as powerful alternatives. The Swin Transformer~\cite{liu2021swin} introduced hierarchical feature maps and shifted window-based attention, allowing efficient computation for high-resolution images. SwinIR~\cite{liang2021swinir} adapted this to image restoration tasks. However, directly applying such architectures to low-light enhancement requires architectural modifications to handle illumination variation. Furthermore, most methods report results exclusively on the LOL-v1 test set (15 images), risking overfitting. The LOL-v2 dataset~\cite{yang2021lolv2} provides a larger test set (100 pairs), enabling rigorous generalization assessment, which we address in this work.
+More recently, transformer-based approaches have emerged as powerful alternatives. The Swin Transformer~\cite{liu2021swin} introduced hierarchical feature maps and shifted window-based attention, allowing efficient computation for high-resolution images. SwinIR~\cite{liang2021swinir} adapted this to image restoration tasks. However, directly applying such architectures to low-light enhancement requires architectural modifications to handle illumination variation. Recently, medical Swin-Unet backbones have been adapted for low-light enhancement using heavy embedding dimensions~\cite{lehmann2025perceptually}. However, such models incur massive computational overhead. In contrast, SwinLLIE is a compact architecture specifically designed from the ground up for illumination handling. It significantly diverges from these heavy adaptations by introducing a custom illumination-aware hybrid loss function with explicit exposure control ($\mathcal{L}_{exp}$) and edge preservation, mathematically preventing color shifting and overexposure artifacts without prohibitive computational costs. Furthermore, most methods report results exclusively on the LOL-v1 test set (15 images), risking overfitting. The LOL-v2 dataset~\cite{yang2021lolv2} provides a larger test set (100 pairs), enabling rigorous generalization assessment, which we address in this work.
 
 % ----------------------------------------------------------------
 % III. PROPOSED METHOD
@@ -353,6 +353,9 @@ M. J. Lee, C.-h. Rhee, and C. H. Lee, ``HSVNet: Reconstructing HDR Image from a 
 
 \bibitem{eilertsen2017singlehdr}
 G. Eilertsen, J. Kronander, G. Denes, R. K. Mantiuk, and J. Unger, ``HDR image reconstruction from a single exposure using deep CNNs,'' \textit{ACM Trans. Graph.}, vol. 36, no. 6, Art. no. 178, 2017, doi: 10.1145/3130800.3130816.
+
+\bibitem{lehmann2025perceptually}
+P. Lehmann and P. Rokita, ``Perceptually Optimised Swin-Unet for Low-light Image Enhancement,'' \textit{arXiv preprint}, 2025.
 
 \bibitem{yang2021lolv2}
 W. Yang, W. Wang, H. Huang, S. Wang, and J. Liu, ``Sparse Gradient Regularized Deep Retinex Network for Robust Low-Light Image Enhancement,'' \textit{IEEE Trans. Image Process.}, vol. 30, pp. 2072--2086, 2021.
