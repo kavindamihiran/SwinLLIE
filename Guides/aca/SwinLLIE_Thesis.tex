@@ -17,7 +17,11 @@
 \usepackage{booktabs}
 \usepackage{multirow}
 \usepackage{array}
+\usepackage{microtype}
 \usepackage{hyperref}
+
+% Improve global line breaking so text stays within page margins.
+\setlength{\emergencystretch}{3em}
 
 % --- Chapter & Section Formatting ---
 \titleformat{\chapter}[display]
@@ -53,6 +57,7 @@
 
 
 \begin{document}
+\sloppy
 
 % ==========================================
 % FRONT MATTER
@@ -65,12 +70,12 @@
 \begin{center}
     \vspace*{1in}
     \textbf{\large SWINLLIE: SWIN TRANSFORMER FOR LOW-LIGHT IMAGE ENHANCEMENT WITH MULTI-SCALE PROCESSING}\\[1.5in]
-    
-    Names of the Candidates\\[0.5in]
-    University Registration Numbers\\[1in]
-    
-    Project Report submitted in partial fulfillment of the requirements for the\\
-    2nd-Year Software Project for the degree of\\[0.2in]
+
+    K.K.M.N. Bandara (235510J)\\[0.15in]
+    N.M.C.K. Navarathne (235523C)\\[0.15in]
+    N.A.A.R.D. Nishshanka (235527R)\\[0.15in]
+    P. Shampavi (235539F)\\[1in]
+
     BSc Hons in Artificial Intelligence\\[1in]
     
     Department of Computational Mathematics\\
@@ -79,28 +84,30 @@
     University of Moratuwa\\
     Sri Lanka\\[1in]
     
-    Month Year
+    May 2026
 \end{center}
 
 % --- Page iii: Declaration ---
 \clearpage
 \addcontentsline{toc}{chapter}{DECLARATION}
 \vspace*{0.5in}
-\noindent Declaration\\[0.2in]
-I declare that this is my own work and this thesis/dissertation does not incorporate without acknowledgement any material previously submitted for a degree or diploma in any other University or Institute of higher learning and to the best of my knowledge and belief it does not contain any material previously published or written by another person except where the acknowledgement is made in the text. I retain the right to use this content in whole or part in future works (such as articles or books).\\[1in]
+\noindent \textbf{DECLARATION}\\[0.2in]
+I declare that this is my own work and that this thesis/dissertation does not incorporate, without acknowledgement, any material previously submitted for a degree or diploma in any other University or Institute of higher learning and to the best of my knowledge and belief it does not contain any material previously published or written by another person except where the acknowledgement is made in the text. I retain the right to use this content in whole or part in future works such as articles or books.\\[0.35in]
 
-\noindent Signature (Candidate 1): \hfill Date:\\[0.3in]
-\noindent Signature (Candidate 2): \hfill Date:\\[0.3in]
-\noindent Signature (Candidate 3): \hfill Date:\\[0.3in]
-\noindent Signature (Candidate 4): \hfill Date:\\[0.5in]
+\noindent Signature: \makebox[2.7in]{\dotfill} \hspace{0.25in} Date: \makebox[1.4in]{\dotfill}\\[0.28in]
+\noindent Signature: \makebox[2.7in]{\dotfill} \hspace{0.25in} Date: \makebox[1.4in]{\dotfill}\\[0.28in]
+\noindent Signature: \makebox[2.7in]{\dotfill} \hspace{0.25in} Date: \makebox[1.4in]{\dotfill}\\[0.28in]
+\noindent Signature: \makebox[2.7in]{\dotfill} \hspace{0.25in} Date: \makebox[1.4in]{\dotfill}\\[0.35in]
 
-\noindent The above candidate has carried out research for the undergraduate thesis/dissertation under my supervision. I confirm that the declaration made above by the student is true and correct.\\[1in]
+\noindent The above candidate has carried out research for the undergraduate thesis/dissertation under my supervision. I confirm that the declaration made above by the student is true and correct.\\[0.45in]
 
-\noindent Name of Academic Advisor:\\[0.3in]
-\noindent Signature of Academic Advisor: \hfill Date:\\[0.5in]
+\noindent Name of Academic Advisor: \makebox[3.5in]{\dotfill}\\[0.25in]
+\noindent Signature of Academic Advisor: \makebox[2.9in]{\dotfill}\\[0.2in]
+\noindent Date: \makebox[2.3in]{\dotfill}\\[0.4in]
 
-\noindent Name of Industry Supervisor:\\[0.3in]
-\noindent Signature of Industry Supervisor: \hfill Date:
+\noindent Name of Industry Supervisor: \makebox[3.45in]{\dotfill}\\[0.25in]
+\noindent Signature of Industry Supervisor: \makebox[2.85in]{\dotfill}\\[0.2in]
+\noindent Date: \makebox[2.3in]{\dotfill}
 
 % --- Page iv: Dedication ---
 \clearpage
@@ -805,8 +812,14 @@ import gradio as gr
 import torch
 from swinllie import SwinLLIE
 
-model = SwinLLIE(embed_dim=60, depths=[4,4,4], num_heads=[6,6,6])
-model.load_state_dict(torch.load('checkpoints/best_model.pth', map_location='cpu'))
+model = SwinLLIE(
+    embed_dim=60,
+    depths=[4, 4, 4],
+    num_heads=[6, 6, 6]
+)
+model.load_state_dict(
+    torch.load('checkpoints/best_model.pth', map_location='cpu')
+)
 model.eval()
 
 # Gradio interface definition...
@@ -831,7 +844,12 @@ A practical guide to fine-tuning the SwinIR model on custom low-light datasets.
 from swinllie import SwinLLIE
 import torch
 
-model = SwinLLIE(embed_dim=60, depths=[4, 4, 4], num_heads=[6, 6, 6], window_size=8)
+model = SwinLLIE(
+    embed_dim=60,
+    depths=[4, 4, 4],
+    num_heads=[6, 6, 6],
+    window_size=8
+)
 checkpoint = torch.load('pretrained.pth', map_location='cpu')
 model.load_state_dict(checkpoint['model_state_dict'])
 \end{verbatim}
