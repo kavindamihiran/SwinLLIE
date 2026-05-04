@@ -9,7 +9,8 @@
 \usepackage{graphicx}
 \usepackage{textcomp}
 \usepackage{xcolor}
-\usepackage{hyperref}
+% \usepackage{url}
+% \usepackage{hyperref} % disabled to avoid bookmarks and links for IEEE submission
 \usepackage{booktabs}
 \usepackage{multirow}
 \usepackage{array}
@@ -24,7 +25,7 @@
 % ABSTRACT
 % ----------------------------------------------------------------
 \begin{abstract}
-Low-light image enhancement (LLIE) is essential for downstream computer vision tasks including autonomous driving, surveillance, and semantic segmentation. Conventional techniques often struggle with non-uniform illumination, resulting in texture loss, color distortion, and overexposure. To mitigate these limitations, we propose SwinLLIE (Swin Transformer for Low-Light Image Enhancement), a novel architecture that combines the efficiency of Swin Transformers with a U-Net encoder-decoder structure for multi-scale feature processing. A key contribution is our illumination-aware hybrid loss function incorporating L1 reconstruction, VGG perceptual, color consistency, edge preservation, and exposure control losses, which mathematically prevents color shifting and overexposure artifacts. Experimental results on the LOL dataset demonstrate that SwinLLIE achieves a PSNR of 19.09 dB and SSIM of 0.84 with a compact model size of 4.68M parameters. Cross-dataset evaluation on the LOL-v2 Real\_captured benchmark (100 unseen image pairs) yields 18.46 dB PSNR and 0.79 SSIM, demonstrating robust generalization beyond the training distribution.
+Low-light image enhancement (LLIE) is essential for various computer vision tasks including autonomous driving, surveillance, and semantic segmentation. Conventional techniques often struggle with non-uniform illumination, resulting in texture loss, color distortion, and overexposure. To mitigate these limitations, we propose SwinLLIE (Swin Transformer for Low-Light Image Enhancement), a novel architecture that combines the efficiency of Swin Transformers with a U-Net encoder-decoder structure for multi-scale feature processing. A key contribution is our illumination-aware hybrid loss function incorporating VGG perceptual, L1 reconstruction, color consistency, edge preservation, and exposure control losses, which mathematically prevents color shifting and overexposure artifacts. Experimental results on LOL dataset demonstrate that SwinLLIE achieves a PSNR of 19.09 dB and SSIM of 0.84 with a compact model size of 4.68M parameters. Evaluating across datasets on LOL-v2 Real\_captured benchmark (100 unseen image pairs) yields 18.46 dB PSNR and 0.79 SSIM, highlighting robust generalization beyond the training distribution.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -42,10 +43,10 @@ In contrast to conventional techniques that apply uniform brightness adjustments
 
 The key contributions of this work are:
 \begin{itemize}
-    \item A novel illumination-aware hybrid loss function combining five complementary objectives---including an exposure control loss that mathematically prevents overexposure and color shifting---designed specifically for low-light enhancement
+    \item A novel illumination-aware hybrid loss function integrates five complementary objectives including an exposure control loss that mathematically prevents overexposure and color shifts,  designed specifically for low-light enhancement
     \item A compact hybrid CNN-Swin Transformer architecture (4.68M parameters) with a U-Net encoder-decoder structure and learnable skip-connection fusion for multi-scale feature processing
     \item Cross-dataset generalization validation on both LOL-v1 and LOL-v2 benchmarks, demonstrating robust performance on 100 completely unseen image pairs
-    \item Comprehensive efficiency analysis showing that window-based self-attention reduces computational complexity from $O(N^2)$ to $O(N \times w^2)$, enabling deployment on resource-constrained devices
+    \item Comprehensive efficiency analysis showing that window-based self-attention reduces computational complexity from $O(N^2)$ to $O(N \times w^2)$, making it feasible for deployment on resource-constrained devices
 \end{itemize}
 
 % ----------------------------------------------------------------
@@ -55,7 +56,7 @@ The key contributions of this work are:
 
 Recent deep learning approaches have shown significant advancements over classical methods like histogram equalization and Retinex~\cite{land1977retinex}. CNN-based models such as LLNet~\cite{lore2017llnet} and Retinex-Net enhance brightness but often produce oversmoothing. GAN-based methods like EnlightenGAN~\cite{jiang2021enlightengan} use perceptual enhancement but struggle with intricate details in challenging lighting conditions.
 
-More recently, transformer-based approaches have emerged as powerful alternatives. The Swin Transformer~\cite{liu2021swin} introduced hierarchical feature maps and shifted window-based attention, allowing efficient computation for high-resolution images. SwinIR~\cite{liang2021swinir} adapted this to image restoration tasks. However, directly applying such architectures to low-light enhancement requires architectural modifications to handle illumination variation. Recently, a perceptually optimized Swin-Unet architecture has been adapted for low-light enhancement~\cite{lehmann2025perceptually}. While this approach improves perceptual fidelity using an LPIPS-based loss, such standard segmentation U-Net adaptations often struggle to provide optimal parameter-efficiency and lack explicit highlight suppression. In contrast, SwinLLIE is a highly compact architecture specifically designed from the ground up for illumination handling. It significantly diverges from these adaptations by introducing a custom illumination-aware hybrid loss function with explicit exposure control ($\mathcal{L}_{exp}$) and edge preservation, mathematically preventing color shifting and overexposure artifacts without prohibitive computational costs. Furthermore, most methods report results exclusively on the LOL-v1 test set (15 images), risking overfitting. The LOL-v2 dataset~\cite{yang2021lolv2} provides a larger test set (100 pairs), enabling rigorous generalization assessment, which we address in this work.
+More recently, transformer-based approaches have emerged as powerful alternatives. The Swin Transformer~\cite{liu2021swin} introduced hierarchical feature maps and shifted window-based attention, allowing efficient computation for high-resolution images. SwinIR~\cite{liang2021swinir} adapted this to image restoration tasks. However, directly applying such architectures to low-light enhancement requires architectural modifications to handle illumination variation. Recently, a perceptually optimized Swin-Unet architecture has been adapted for low-light enhancement~\cite{lehmann2025perceptually}. While this approach improves perceptual fidelity using an LPIPS-based loss, such standard segmentation U-Net adaptations often struggle to provide optimal parameter-efficiency and lack explicit highlight suppression. In contrast, SwinLLIE is a highly compact architecture specifically designed from the ground up for illumination handling. It significantly diverges from these adaptations by introducing a custom illumination-aware hybrid loss function with explicit exposure control and edge preservation, mathematically preventing color shifting and overexposure artifacts without prohibitive computational costs. Furthermore, most methods report results exclusively on the LOL-v1 test set (15 images), risking overfitting. The LOL-v2 dataset~\cite{yang2021lolv2} provides a larger test set (100 pairs), enabling rigorous generalization assessment, which we address in this work.
 
 % ----------------------------------------------------------------
 % III. PROPOSED METHOD
@@ -156,7 +157,7 @@ SwinLLIE employs an embedding dimension of 60, with encoder depths and attention
 
 \subsection{Evaluation Metrics}
 
-To quantitatively evaluate the performance of SwinLLIE, we employ two standard metrics: Peak Signal-to-Noise Ratio (PSNR) and Structural Similarity Index (SSIM).
+To quantitatively evaluate the performance of SwinLLIE, we use two standard metrics: Peak Signal-to-Noise Ratio (PSNR) and Structural Similarity Index (SSIM).
 
 \textbf{1) PSNR:} Peak Signal-to-Noise Ratio measures the pixel-level fidelity between the enhanced image and the ground truth. It calculates the error between corresponding pixels, where a higher PSNR value indicates less error and better reconstruction quality.
 
@@ -214,7 +215,7 @@ SNR-Net & 39.1M & -- & 24.61 & 0.842 \\
 \label{tab:efficiency}
 \end{table}
 
-SwinLLIE requires 267.67 GFLOPs at $400 \times 600$ resolution, which, while non-trivial, is paired with a compact 4.68M parameter footprint---an order of magnitude smaller than SNR-Net (39.1M). This compact design makes SwinLLIE significantly more amenable to deployment on memory-constrained edge devices.
+SwinLLIE requires 267.67 GFLOPs at $400 \times 600$ resolution, which, while non-trivial, is paired with a compact 4.68M parameter footprint an order of magnitude smaller than SNR-Net (39.1M). This compact design makes SwinLLIE significantly more amenable to deployment on memory-constrained edge devices.
 
 \subsection{Qualitative Analysis}
 
@@ -234,7 +235,7 @@ The hybrid loss function combining L1, VGG perceptual, color consistency, edge p
 
 \subsection{Cross-Dataset Generalization}
 
-To validate that SwinLLIE does not merely overfit to the 15 test images of LOL-v1, we conduct cross-dataset evaluation on the LOL-v2 Real\_captured test set~\cite{yang2021lolv2}, which contains 100 completely unseen image pairs captured under diverse real-world conditions. As shown in Table~\ref{tab:generalization}, SwinLLIE maintains competitive performance, achieving 18.46 dB PSNR and 0.79 SSIM on LOL-v2 without any fine-tuning or domain adaptation. The modest PSNR decrease of 0.63 dB across datasets demonstrates robust generalization.
+To validate that SwinLLIE does not simply overfit to the 15 test images of LOL-v1, we perform a cross-dataset evaluation on LOL-v2 Real\_captured test set~\cite{yang2021lolv2}, which includes 100 completely unseen image pairs captured under diverse real-world conditions. As shown in Table~\ref{tab:generalization}, SwinLLIE maintains competitive performance, achieving 18.46 dB PSNR and 0.79 SSIM on LOL-v2 without any fine-tuning or domain adaptation. The modest PSNR decrease of 0.63 dB across datasets demonstrates robust generalization.
 
 \begin{table}[htbp]
 \caption{Cross-Dataset Generalization Results}
@@ -263,7 +264,7 @@ To qualitatively assess the contribution of each loss component, we visualize en
 
 \subsection{Limitations}
 
-While SwinLLIE achieves competitive SSIM (0.840) comparable to much larger models such as SNR-Net (0.842), a PSNR gap remains compared to recent heavy transformer architectures like Retinexformer (25.16 dB vs.\ 19.09 dB). This gap is primarily attributable to the compact model capacity (4.68M parameters). Additionally, inference at $400 \times 600$ resolution requires 267.67 GFLOPs, which may limit real-time deployment. Future work will explore knowledge distillation and model pruning to further optimize the efficiency--quality trade-off.
+While SwinLLIE achieves competitive SSIM (0.840) comparable to much larger models such as SNR-Net (0.842), a PSNR gap remains compared to recent heavy transformer architectures like Retinexformer (25.16 dB vs.\ 19.09 dB). This gap is primarily attributable to the compact model capacity (4.68M parameters). Additionally, inference at $400 \times 600$ resolution requires 267.67 GFLOPs, which may limit real-time deployment. Future work will explore knowledge distillation and model pruning to further optimize the efficiency-quality trade-off.
 
 % ----------------------------------------------------------------
 % VI. CONCLUSION
@@ -272,7 +273,7 @@ While SwinLLIE achieves competitive SSIM (0.840) comparable to much larger model
 
 This paper presents SwinLLIE, a Swin Transformer-based architecture for low-light image enhancement that combines multi-scale feature processing with an illumination-aware hybrid loss function. The method achieves 19.09 dB PSNR and 0.84 SSIM on the LOL-v1 benchmark while maintaining a compact footprint of 4.68M parameters. Crucially, cross-dataset evaluation on 100 unseen LOL-v2 image pairs confirms generalization (18.46 dB PSNR, 0.79 SSIM) without fine-tuning.
 
-The proposed five-component loss function---particularly the exposure control loss---effectively prevents color shifts and overexposure, addressing a persistent challenge in low-light enhancement. The window-based self-attention mechanism reduces computational complexity from $O(N^2)$ to $O(N \times w^2)$~\cite{liu2021swin}, and the compact parameter count makes the model amenable to edge deployment. Future work will focus on knowledge distillation for real-time inference, unsupervised training paradigms, and extension to video enhancement.
+The proposed five-component loss function particularly the exposure control loss effectively prevents color shifts and overexposure, addressing a persistent challenge in low-light enhancement. The window-based self-attention mechanism reduces computational complexity from $O(N^2)$ to $O(N \times w^2)$~\cite{liu2021swin}, and the compact parameter count makes the model amenable to edge deployment. Future work will focus on knowledge distillation for real-time inference, unsupervised training paradigms, and extension to video enhancement.
 
 % ----------------------------------------------------------------
 % REFERENCES
@@ -283,31 +284,31 @@ The proposed five-component loss function---particularly the exposure control lo
 Z. Liu, Y. Lin, Y. Cao, H. Hu, Y. Wei, Z. Zhang, S. Lin, and B. Guo, ``Swin Transformer: Hierarchical Vision Transformer using Shifted Windows,'' in \textit{Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV)}, pp. 10012--10022, 2021.
 
 \bibitem{liang2021swinir}
-J. Liang, J. Cao, G. Sun, K. Zhang, L. Van Gool, and R. Timofte, ``SwinIR: Image Restoration Using Swin Transformer,'' in \textit{Proc. IEEE/CVF Int. Conf. Comput. Vis. Workshops (ICCVW)}, pp. 1833--1844, 2021. \url{https://openaccess.thecvf.com/content/ICCV2021W/AIM/papers/Liang_SwinIR_Image_Restoration_Using_Swin_Transformer_ICCVW_2021_paper.pdf}
+J. Liang, J. Cao, G. Sun, K. Zhang, L. Van Gool, and R. Timofte, ``SwinIR: Image Restoration Using Swin Transformer,'' in \textit{Proc. IEEE/CVF Int. Conf. Comput. Vis. Workshops (ICCVW)}, pp. 1833--1844, 2021. 
 
 \bibitem{land1977retinex}
 E. H. Land, ``The Retinex Theory of Color Vision,'' \textit{Scientific American}, vol. 237, no. 6, pp. 108--128, 1977.
 
 \bibitem{lore2017llnet}
-K. G. Lore, A. Akintayo, and S. Sarkar, ``LLNet: A Deep Autoencoder Approach to Natural Low-light Image Enhancement,'' \textit{Pattern Recognition}, vol. 61, pp. 650--662, 2017. \url{https://arxiv.org/abs/1511.03995}
+K. G. Lore, A. Akintayo, and S. Sarkar, ``LLNet: A Deep Autoencoder Approach to Natural Low-light Image Enhancement,'' \textit{Pattern Recognition}, vol. 61, pp. 650--662, 2017. 
 
 \bibitem{jiang2021enlightengan}
-Y. Jiang, X. Gong, D. Liu, Y. Cheng, C. Fang, X. Shen, J. Yang, P. Zhou, and Z. Wang, ``EnlightenGAN: Deep Light Enhancement without Paired Supervision,'' \textit{IEEE Trans. Image Process.}, vol. 30, pp. 2340--2349, 2021. \url{https://arxiv.org/abs/1906.06972}
+Y. Jiang, X. Gong, D. Liu, Y. Cheng, C. Fang, X. Shen, J. Yang, P. Zhou, and Z. Wang, ``EnlightenGAN: Deep Light Enhancement without Paired Supervision,'' \textit{IEEE Trans. Image Process.}, vol. 30, pp. 2340--2349, 2021. 
 
 \bibitem{guo2020zero}
-C. Guo, C. Li, J. Guo, C. C. Loy, J. Hou, S. Kwong, and R. Cong, ``Zero-Reference Deep Curve Estimation for Low-Light Image Enhancement,'' in \textit{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)}, pp. 1780--1789, 2020. \url{https://openaccess.thecvf.com/content_CVPR_2020/html/Guo_Zero-Reference_Deep_Curve_Estimation_for_Low-Light_Image_Enhancement_CVPR_2020_paper.html}
+C. Guo, C. Li, J. Guo, C. C. Loy, J. Hou, S. Kwong, and R. Cong, ``Zero-Reference Deep Curve Estimation for Low-Light Image Enhancement,'' in \textit{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)}, pp. 1780--1789, 2020. 
 
 \bibitem{lol_dataset}
-C. Wei, W. Wang, W. Yang, and J. Liu, ``Deep Retinex Decomposition for Low-Light Enhancement,'' in \textit{Proc. Brit. Mach. Vis. Conf. (BMVC)}, 2018. \url{https://daooshee.github.io/BMVC2018website/}
+C. Wei, W. Wang, W. Yang, and J. Liu, ``Deep Retinex Decomposition for Low-Light Enhancement,'' in \textit{Proc. Brit. Mach. Vis. Conf. (BMVC)}, 2018. 
 
 \bibitem{vaswani2017attention}
-A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez, L. Kaiser, and I. Polosukhin, ``Attention Is All You Need,'' in \textit{Advances in Neural Information Processing Systems}, vol. 30, 2017. \url{https://arxiv.org/abs/1706.03762}
+A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez, L. Kaiser, and I. Polosukhin, ``Attention Is All You Need,'' in \textit{Advances in Neural Information Processing Systems}, vol. 30, 2017. 
 
 \bibitem{johnson2016perceptual}
-J. Johnson, A. Alahi, and L. Fei-Fei, ``Perceptual Losses for Real-Time Style Transfer and Super-Resolution,'' in \textit{Proc. European Conf. Comput. Vis. (ECCV)}, pp. 694--711, 2016. \url{https://arxiv.org/abs/1603.08155}
+J. Johnson, A. Alahi, and L. Fei-Fei, ``Perceptual Losses for Real-Time Style Transfer and Super-Resolution,'' in \textit{Proc. European Conf. Comput. Vis. (ECCV)}, pp. 694--711, 2016. 
 
 \bibitem{xu2023smg}
-X. Xu, R. Wang, C.-W. Fu, and J. Jia, ``Low-Light Image Enhancement via Structure Modeling and Guidance,'' in \textit{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)}, pp. 9893--9903, 2023. \url{https://openaccess.thecvf.com/content/CVPR2023/html/Xu_Low-Light_Image_Enhancement_via_Structure_Modeling_and_Guidance_CVPR_2023_paper.html}
+X. Xu, R. Wang, C.-W. Fu, and J. Jia, ``Low-Light Image Enhancement via Structure Modeling and Guidance,'' in \textit{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)}, pp. 9893--9903, 2023. 
 
 \bibitem{xu2022snrnet}
 X. Xu, R. Wang, C.-W. Fu, and J. Jia, ``SNR-Aware Low-Light Image Enhancement,'' in \textit{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)}, pp. 17714--17724, 2022.
@@ -346,7 +347,7 @@ F. Sun, B. Li, and Q. Zhang, ``EDRNet: Edge-Enhanced Dynamic Routing Adaptive fo
 Y. Zheng, W. Wang, X. Wang, and X. Yuan, ``RLUNet: Overexposure-Content-Recovery-Based Single HDR Image Reconstruction with the Imaging Pipeline Principle,'' \textit{Applied Sciences}, vol. 14, no. 23, Art. no. 11289, 2024, doi: 10.3390/app142311289.
 
 \bibitem{afifi2021exposurecorrection}
-M. Afifi, K. G. Derpanis, B. Ommer, and M. S. Brown, ``Learning Multi-Scale Photo Exposure Correction,'' in \textit{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2021. \url{https://arxiv.org/abs/2003.11596}
+M. Afifi, K. G. Derpanis, B. Ommer, and M. S. Brown, ``Learning Multi-Scale Photo Exposure Correction,'' in \textit{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2021. 
 
 \bibitem{lee2022hsvnet}
 M. J. Lee, C.-h. Rhee, and C. H. Lee, ``HSVNet: Reconstructing HDR Image from a Single Exposure LDR Image with CNN,'' \textit{Applied Sciences}, vol. 12, no. 5, Art. no. 2370, 2022, doi: 10.3390/app12052370.
