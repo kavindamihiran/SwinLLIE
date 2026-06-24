@@ -1,0 +1,5 @@
+Swin-LLIE candidate generation summary
+
+Image: test/Dark.jpg
+Folder: results/preview_dark_candidates/001_Dark
+Auto strength: 0.62

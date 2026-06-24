@@ -1,0 +1,203 @@
+{
+  "input": "test/Dark.jpg",
+  "weights": "./experiments/test_run/checkpoints/best.pth",
+  "input_stats": {
+    "mean_luminance": 0.17378349602222443,
+    "p95_luminance": 0.7595482468605042,
+    "bright_percent": 11.162288930581614,
+    "near_clipped_percent": 0.9978893058161351,
+    "mean_saturation": 0.27541929483413696
+  },
+  "auto_strength": 0.615992309898138,
+  "contact_sheet": "contact_sheet.png",
+  "candidates": [
+    {
+      "name": "01_raw_model",
+      "file": "01_raw_model.png",
+      "description": "Raw model output. Strongest enhancement, least protection.",
+      "settings": {
+        "mode": "raw"
+      },
+      "actual": {
+        "enhance_strength": 1.0
+      },
+      "stats": {
+        "mean_luminance": 0.5586104393005371,
+        "p95_luminance": 0.9997168779373169,
+        "bright_percent": 41.20755159474672,
+        "near_clipped_percent": 11.696529080675422,
+        "mean_saturation": 0.11991788446903229
+      }
+    },
+    {
+      "name": "02_auto_balanced",
+      "file": "02_auto_balanced.png",
+      "description": "Default balanced candidate for mixed real-world images.",
+      "settings": {
+        "strength_offset": 0.0,
+        "dark_threshold": 0.25,
+        "bright_threshold": 0.55,
+        "blend_strength": 1.0,
+        "chroma_strength": 1.0,
+        "max_color_gain": 10.0,
+        "saturation": 1.0
+      },
+      "actual": {
+        "enhance_strength": 0.615992309898138
+      },
+      "stats": {
+        "mean_luminance": 0.3785265386104584,
+        "p95_luminance": 0.7873184680938721,
+        "bright_percent": 23.74155722326454,
+        "near_clipped_percent": 0.0,
+        "mean_saturation": 0.15537522733211517
+      }
+    },
+    {
+      "name": "03_auto_soft",
+      "file": "03_auto_soft.png",
+      "description": "Softer enhancement for backlit scenes and skies.",
+      "settings": {
+        "strength_offset": -0.15,
+        "min_strength": 0.35,
+        "dark_threshold": 0.25,
+        "bright_threshold": 0.55,
+        "blend_strength": 1.0,
+        "chroma_strength": 1.0,
+        "max_color_gain": 10.0,
+        "saturation": 1.0
+      },
+      "actual": {
+        "enhance_strength": 0.465992309898138
+      },
+      "stats": {
+        "mean_luminance": 0.32822155952453613,
+        "p95_luminance": 0.7766865491867065,
+        "bright_percent": 16.81590056285178,
+        "near_clipped_percent": 0.0,
+        "mean_saturation": 0.159443199634552
+      }
+    },
+    {
+      "name": "04_auto_bright",
+      "file": "04_auto_bright.png",
+      "description": "Brighter version while still protecting highlights.",
+      "settings": {
+        "strength_offset": 0.18,
+        "dark_threshold": 0.25,
+        "bright_threshold": 0.55,
+        "blend_strength": 1.0,
+        "chroma_strength": 1.0,
+        "max_color_gain": 10.0,
+        "saturation": 1.0
+      },
+      "actual": {
+        "enhance_strength": 0.7959923098981381
+      },
+      "stats": {
+        "mean_luminance": 0.4388960003852844,
+        "p95_luminance": 0.8141513466835022,
+        "bright_percent": 27.834427767354597,
+        "near_clipped_percent": 0.0,
+        "mean_saturation": 0.15236085653305054
+      }
+    },
+    {
+      "name": "05_highlight_strict",
+      "file": "05_highlight_strict.png",
+      "description": "More aggressive sky/light preservation.",
+      "settings": {
+        "strength_offset": 0.05,
+        "dark_threshold": 0.2,
+        "bright_threshold": 0.45,
+        "blend_strength": 1.0,
+        "chroma_strength": 1.0,
+        "max_color_gain": 10.0,
+        "saturation": 1.0
+      },
+      "actual": {
+        "enhance_strength": 0.6659923098981381
+      },
+      "stats": {
+        "mean_luminance": 0.3809092044830322,
+        "p95_luminance": 0.7736392021179199,
+        "bright_percent": 19.553236397748595,
+        "near_clipped_percent": 0.0,
+        "mean_saturation": 0.15501804649829865
+      }
+    },
+    {
+      "name": "06_shadow_only",
+      "file": "06_shadow_only.png",
+      "description": "Boosts dark regions while leaving mid/bright regions closer to input.",
+      "settings": {
+        "strength_offset": 0.1,
+        "max_strength": 0.85,
+        "dark_threshold": 0.12,
+        "bright_threshold": 0.35,
+        "blend_strength": 1.0,
+        "chroma_strength": 1.0,
+        "max_color_gain": 10.0,
+        "saturation": 1.0
+      },
+      "actual": {
+        "enhance_strength": 0.715992309898138
+      },
+      "stats": {
+        "mean_luminance": 0.3710865378379822,
+        "p95_luminance": 0.7634745240211487,
+        "bright_percent": 14.617026266416511,
+        "near_clipped_percent": 0.0,
+        "mean_saturation": 0.15497544407844543
+      }
+    },
+    {
+      "name": "07_full_low_light",
+      "file": "07_full_low_light.png",
+      "description": "Full enhancement with color and highlight protection.",
+      "settings": {
+        "fixed_strength": 1.0,
+        "dark_threshold": 0.25,
+        "bright_threshold": 0.55,
+        "blend_strength": 1.0,
+        "chroma_strength": 1.0,
+        "max_color_gain": 10.0,
+        "saturation": 1.0
+      },
+      "actual": {
+        "enhance_strength": 1.0
+      },
+      "stats": {
+        "mean_luminance": 0.5073105692863464,
+        "p95_luminance": 0.8802185654640198,
+        "bright_percent": 38.61210131332082,
+        "near_clipped_percent": 0.00046904315196998124,
+        "mean_saturation": 0.1501222401857376
+      }
+    },
+    {
+      "name": "08_color_pop",
+      "file": "08_color_pop.png",
+      "description": "Balanced candidate with subtle extra color.",
+      "settings": {
+        "strength_offset": 0.0,
+        "dark_threshold": 0.25,
+        "bright_threshold": 0.55,
+        "blend_strength": 1.0,
+        "chroma_strength": 1.0,
+        "max_color_gain": 12.0,
+        "saturation": 1.12
+      },
+      "actual": {
+        "enhance_strength": 0.615992309898138
+      },
+      "stats": {
+        "mean_luminance": 0.3792245388031006,
+        "p95_luminance": 0.785923182964325,
+        "bright_percent": 23.731941838649156,
+        "near_clipped_percent": 0.005628517823639775,
+        "mean_saturation": 0.17222507297992706
+      }
+    }
+  ]
+}

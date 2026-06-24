@@ -27,21 +27,26 @@ def parse_args():
     return parser.parse_args()
 
 
-def evaluate_single(model, device, dataset_path):
-    """Evaluate model on one test image, returns (psnr, ssim)."""
+def evaluate_dataset(model, device, dataset_path):
+    """Evaluate model on the full test set, returns average (psnr, ssim)."""
     model.eval()
     test_loader = get_dataloader('lol', dataset_path, 'test', batch_size=1, patch_size=None, num_workers=1)
+    psnr_values = []
+    ssim_values = []
     
     with torch.no_grad():
-        batch = next(iter(test_loader))  # Get first image only
-        low, high = batch['low'].to(device), batch['high'].to(device)
-        output = model(low).clamp(0, 1)
-        
-        # Convert to numpy (H, W, C) for metrics
-        out_np = output[0].cpu().numpy().transpose(1, 2, 0) * 255
-        gt_np = high[0].cpu().numpy().transpose(1, 2, 0) * 255
-        
-        return calculate_psnr(out_np, gt_np), calculate_ssim(out_np, gt_np)
+        for batch in test_loader:
+            low, high = batch['low'].to(device), batch['high'].to(device)
+            output = model(low).clamp(0, 1)
+            
+            # Convert to numpy (H, W, C) for metrics
+            out_np = output[0].cpu().numpy().transpose(1, 2, 0) * 255
+            gt_np = high[0].cpu().numpy().transpose(1, 2, 0) * 255
+            
+            psnr_values.append(calculate_psnr(out_np, gt_np))
+            ssim_values.append(calculate_ssim(out_np, gt_np))
+    
+    return float(np.mean(psnr_values)), float(np.mean(ssim_values))
 
 if __name__ == '__main__':
     # Parse arguments and load config
@@ -91,6 +96,7 @@ if __name__ == '__main__':
             print('GPU detection failed, using CPU...')
     
     device = torch.device('cuda' if use_cuda else 'cpu')
+    USE_AMP = USE_AMP and device.type == 'cuda'
     print(f'Device: {device}')
     if num_gpus > 1:
         print(f'Found {num_gpus} GPUs - will use DataParallel for multi-GPU training')
@@ -248,7 +254,7 @@ if __name__ == '__main__':
             interval_best_loss = avg_loss
             # Save state_dict without 'module.' prefix for compatibility
             state_dict = model.module.state_dict() if isinstance(model, torch.nn.DataParallel) else model.state_dict()
-            interval_best_state = {k: v.clone() for k, v in state_dict.items()}
+            interval_best_state = {k: v.detach().cpu().clone() for k, v in state_dict.items()}
         
         # At every 10th epoch, evaluate PSNR/SSIM on best-loss model from interval
         if (epoch + 1) % EVAL_INTERVAL == 0:
@@ -257,7 +263,7 @@ if __name__ == '__main__':
                 model.module.load_state_dict(interval_best_state)
             else:
                 model.load_state_dict(interval_best_state)
-            psnr, ssim = evaluate_single(model, device, DATASET)
+            psnr, ssim = evaluate_dataset(model, device, DATASET)
             print(f'  -> Test PSNR: {psnr:.2f} dB, SSIM: {ssim:.4f}, Best interval loss: {interval_best_loss:.4f}')
             
             # Save if better overall (PSNR primary, SSIM secondary, loss tertiary)
