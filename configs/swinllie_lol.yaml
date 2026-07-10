@@ -1,4 +1,4 @@
-# Swin-LLIE Training Configuration
+# SwinIR Training Configuration
 # Configuration file for training on LOL Dataset
 
 # =============================================================================
@@ -20,57 +20,58 @@ model:
   drop_path_rate: 0.1
   use_checkpoint: false
   resi_connection: "1conv"
-  use_igam: true  # Enable Illumination-Guided Attention
 
 # =============================================================================
 # Dataset Configuration
 # =============================================================================
 dataset:
-  name: "lol"  # Options: lol, generic, unpaired
-  root_dir: "./datasets/LOL"  # Path to LOL dataset
+  name: "lol" # Options: lol, generic, unpaired
+  root_dir: "./datasets/LOL" # Path to LOL dataset
   patch_size: 96
-  num_workers: 4
+  num_workers: 4 # Per GPU (auto-scaled based on GPU count)
 
 # =============================================================================
 # Training Configuration
 # =============================================================================
 training:
-  batch_size: 4
+  batch_size: 8 # Per GPU base (auto-scaled: 8 for 1 GPU, 16 for 2 GPUs)
   epochs: 100
-  
+
   # Optimizer
   optimizer: "adamw"
   learning_rate: 0.0002
   weight_decay: 0.0001
   betas: [0.9, 0.999]
-  
+
   # Learning rate scheduler
   scheduler: "cosine"
   warmup_epochs: 5
   min_lr: 0.000001
-  
+
   # Mixed precision training (faster on modern GPUs)
   use_amp: true
-  
+
   # Gradient clipping
   grad_clip: 1.0
-  
+
   # Checkpointing
-  save_dir: "./experiments/swinllie_lol"
-  save_freq: 10  # Save every N epochs
-  
+  save_dir: "./experiments/test_run"
+  save_freq: 10 # Save every N epochs
+
   # Logging
-  log_freq: 100  # Log every N iterations
+  log_freq: 100 # Log every N iterations
   use_tensorboard: true
 
 # =============================================================================
-# Loss Configuration  
+# Loss Configuration
 # =============================================================================
 loss:
   lambda_l1: 1.0
   lambda_vgg: 0.1
   lambda_color: 0.5
   lambda_smooth: 0.01
+  lambda_edge: 1.0
+  lambda_exposure: 1.0 # Prevents overexposure in bright regions
   use_ssim: false
   lambda_ssim: 0.1
 
@@ -78,7 +79,7 @@ loss:
 # Validation Configuration
 # =============================================================================
 validation:
-  val_freq: 5  # Validate every N epochs
+  val_freq: 5 # Validate every N epochs
   save_images: true
   num_save_images: 5
 
@@ -86,5 +87,5 @@ validation:
 # Resume Training
 # =============================================================================
 resume:
-  enabled: true
-  checkpoint_path: "./experiments/swinllie_lol/checkpoints/final.pth"
+  enabled: false
+  checkpoint_path: "./experiments/test_run/checkpoints/final.pth"

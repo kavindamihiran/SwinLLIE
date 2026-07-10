@@ -1,0 +1,366 @@
+% ----------------------------------------------------------------
+% SwinLLIE: Swin Transformer for Low-Light Image Enhancement
+% Research Paper - LaTeX Template for IEEE Conference Format
+% ----------------------------------------------------------------
+
+\documentclass[conference]{IEEEtran}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+% \usepackage{url}
+% \usepackage{hyperref} % disabled to avoid bookmarks and links for IEEE submission
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+
+\begin{document}
+
+\title{SwinLLIE: Swin Transformer for Low-Light Image Enhancement with Multi-Scale Processing}
+
+\maketitle
+
+% ----------------------------------------------------------------
+% ABSTRACT
+% ----------------------------------------------------------------
+\begin{abstract}
+Low-light image enhancement (LLIE) is essential for various computer vision tasks including autonomous driving, surveillance, and semantic segmentation. Conventional techniques often struggle with non-uniform illumination, resulting in texture loss, color distortion, and overexposure. To mitigate these limitations, we propose SwinLLIE (Swin Transformer for Low-Light Image Enhancement), a novel architecture that combines the efficiency of Swin Transformers with a U-Net encoder-decoder structure for multi-scale feature processing. A key contribution is our illumination-aware hybrid loss function incorporating VGG perceptual, L1 reconstruction, color consistency, edge preservation, and exposure control losses, which mathematically prevents color shifting and overexposure artifacts. Experimental results on LOL dataset demonstrate that SwinLLIE achieves a PSNR of 19.09 dB and SSIM of 0.84 with a compact model size of 4.68M parameters. Evaluating across datasets on LOL-v2 Real\_captured benchmark (100 unseen image pairs) yields 18.46 dB PSNR and 0.79 SSIM, highlighting robust generalization beyond the training distribution.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Low Light Enhancement, Swin Transformer, Image Restoration, Deep Learning, Multi Scale Processing, Window Attention
+\end{IEEEkeywords}
+
+% ----------------------------------------------------------------
+% I. INTRODUCTION
+% ----------------------------------------------------------------
+\section{Introduction}
+
+Low-light image enhancement plays a crucial role in downstream computer vision applications such as autonomous driving, semantic segmentation, and security surveillance. Conventional enhancement methods often overlook non-uniform illumination handling, which leads to overexposure, detail loss, and texture degradation within the brightness distribution. To mitigate these limitations, SwinLLIE (Swin Transformer for Low-Light Image Enhancement) is proposed with a novel hybrid CNN-Transformer architecture that leverages multi-scale spatial feature learning to deliver improved perceptual quality and structural integrity in enhanced low-light images.
+
+In contrast to conventional techniques that apply uniform brightness adjustments, SwinLLIE introduces a U-Net-based generator~\cite{ronneberger2015unet} with Swin Transformer blocks for multi-scale feature extraction. The Swin Transformer architecture, originally designed for image classification, has shown strong performance in image restoration tasks due to its ability to capture both local and global dependencies through shifted window-based self-attention mechanisms~\cite{liu2021swin, liang2021swinir}.
+
+The key contributions of this work are:
+\begin{itemize}
+    \item A novel illumination-aware hybrid loss function integrates five complementary objectives including an exposure control loss that mathematically prevents overexposure and color shifts,  designed specifically for low-light enhancement
+    \item A compact hybrid CNN-Swin Transformer architecture (4.68M parameters) with a U-Net encoder-decoder structure and learnable skip-connection fusion for multi-scale feature processing
+    \item Cross-dataset generalization validation on both LOL-v1 and LOL-v2 benchmarks, demonstrating robust performance on 100 completely unseen image pairs
+    \item Comprehensive efficiency analysis showing that window-based self-attention reduces computational complexity from $O(N^2)$ to $O(N \times w^2)$, making it feasible for deployment on resource-constrained devices
+\end{itemize}
+
+% ----------------------------------------------------------------
+% II. LITERATURE REVIEW
+% ----------------------------------------------------------------
+\section{Literature Review}
+
+Recent deep learning approaches have shown significant advancements over classical methods like histogram equalization and Retinex~\cite{land1977retinex}. CNN-based models such as LLNet~\cite{lore2017llnet} and Retinex-Net enhance brightness but often produce oversmoothing. GAN-based methods like EnlightenGAN~\cite{jiang2021enlightengan} use perceptual enhancement but struggle with intricate details in challenging lighting conditions.
+
+More recently, transformer-based approaches have emerged as powerful alternatives. The Swin Transformer~\cite{liu2021swin} introduced hierarchical feature maps and shifted window-based attention, allowing efficient computation for high-resolution images. SwinIR~\cite{liang2021swinir} adapted this to image restoration tasks. However, directly applying such architectures to low-light enhancement requires architectural modifications to handle illumination variation. Recently, a perceptually optimized Swin-Unet architecture has been adapted for low-light enhancement~\cite{lehmann2025perceptually}. While this approach improves perceptual fidelity using an LPIPS-based loss, such standard segmentation U-Net adaptations often struggle to provide optimal parameter-efficiency and lack explicit highlight suppression. In contrast, SwinLLIE is a highly compact architecture specifically designed from the ground up for illumination handling. It significantly diverges from these adaptations by introducing a custom illumination-aware hybrid loss function with explicit exposure control and edge preservation, mathematically preventing color shifting and overexposure artifacts without prohibitive computational costs. Furthermore, most methods report results exclusively on the LOL-v1 test set (15 images), risking overfitting. The LOL-v2 dataset~\cite{yang2021lolv2} provides a larger test set (100 pairs), enabling rigorous generalization assessment, which we address in this work.
+
+% ----------------------------------------------------------------
+% III. PROPOSED METHOD
+% ----------------------------------------------------------------
+\section{Proposed SwinLLIE Enhancement Method}
+
+\subsection{Architecture Overview}
+
+SwinLLIE enhances low light images by utilizing multi-scale spatial feature extraction through a U-Net encoder-decoder architecture~\cite{ronneberger2015unet} powered by Swin Transformer blocks. The architecture consists of three main stages: shallow feature extraction, deep feature extraction through encoder-decoder processing, and image reconstruction.
+
+\begin{figure*}[htbp]
+\centering
+\includegraphics[width=\textwidth]{archi.png}
+\caption{Overall architecture of SwinLLIE. The network follows a U-shaped encoder-decoder structure with RSTB (Residual Swin Transformer Block) stages at three scales (dim=60, 120, 240). Skip connections with feature fusion modules preserve fine details. The right panel shows the internal structure of an RSTB block: a BasicLayer containing four alternating W-MSA (Window Multi-head Self-Attention) and SW-MSA (Shifted Window MSA) blocks, followed by a 3×3 convolution with residual connection.}
+\label{fig:architecture}
+\end{figure*}
+
+\subsection{Window-based Self-Attention}
+
+The core of SwinLLIE is the window-based multi-head self-attention (W-MSA) mechanism. Instead of computing attention across the entire image, which has quadratic complexity, we partition the feature map into non-overlapping windows and compute attention within each window:
+
+\begin{equation}
+\text{Attention}(Q, K, V) = \text{Softmax}\left(\frac{QK^T}{\sqrt{d}} + B\right)V
+\end{equation}
+
+where $Q$, $K$, $V$ are the query, key, and value matrices, $d$ is the dimension per head, and $B$ is the relative position bias~\cite{liu2021swin}. The attention mechanism builds upon the standard scaled dot-product attention proposed by Vaswani et al.~\cite{vaswani2017attention}. For an image of size $H \times W$ with window size $w = 8$, window attention reduces complexity from $O((HW)^2)$ to $O(HW \times w^2)$~\cite{liu2021swin}.
+
+To enable cross-window connections, shifted window attention (SW-MSA) is alternated with regular window attention, allowing information flow between adjacent windows~\cite{liu2021swin}.
+
+\subsection{Residual Swin Transformer Block (RSTB)}
+
+Each RSTB, adopted from SwinIR~\cite{liang2021swinir}, contains a stack of Swin Transformer blocks followed by a convolutional layer with a residual connection:
+
+\begin{equation}
+\text{RSTB}(X) = \text{Conv}(\text{BasicLayer}(X)) + X
+\end{equation}
+
+The BasicLayer consists of alternating W-MSA and SW-MSA blocks:
+\begin{equation}
+X' = \text{W-MSA}(\text{LN}(X)) + X, \quad X'' = \text{MLP}(\text{LN}(X')) + X'
+\end{equation}
+\begin{equation}
+Y' = \text{SW-MSA}(\text{LN}(X'')) + X'', \quad Y = \text{MLP}(\text{LN}(Y')) + Y'
+\end{equation}
+
+\subsection{Feature Fusion for Skip Connections}
+
+To effectively combine encoder and decoder features, we employ a learnable fusion module regarding the skip connections concept~\cite{ronneberger2015unet}:
+\begin{equation}
+F_{\text{fused}} = F_{\text{enc}} + F_{\text{dec}} + \text{Conv}([F_{\text{enc}}, F_{\text{dec}}])
+\end{equation}
+
+where $[\cdot, \cdot]$ denotes concatenation along the channel dimension. This three-way combination (addition + learned fusion) enables effective multi-scale feature integration while preserving fine details from the encoder.
+
+% ----------------------------------------------------------------
+% IV. LOSS FUNCTIONS
+% ----------------------------------------------------------------
+\section{Loss Functions}
+
+We adopt a hybrid loss function that balances reconstruction accuracy with perceptual quality:
+\begin{equation}
+\mathcal{L}_{total} = \lambda_1 \mathcal{L}_{L1} + \lambda_v \mathcal{L}_{VGG} + \lambda_c \mathcal{L}_{color} + \lambda_e \mathcal{L}_{edge} + \lambda_x \mathcal{L}_{exp}
+\end{equation}
+where $\lambda_1 = 1.0$, $\lambda_v = 0.1$, $\lambda_c = 0.5$, $\lambda_e = 1.0$, and $\lambda_x = 1.0$.
+
+\textbf{1) Reconstruction \& Perceptual Loss:} The primary reconstruction loss ensures pixel-level accuracy~\cite{isola2016pix2pix}:
+\begin{equation}
+\mathcal{L}_{L1} = \mathbb{E}[\|I_{\text{pred}} - I_{\text{gt}}\|_1]
+\end{equation}
+To preserve high-level features and textures, we compute a perceptual loss in pretrained VGG19 feature space ($\phi_i$)~\cite{simonyan2014vgg, ledig2016srgan, zhang2018lpips}:
+\begin{equation}
+\mathcal{L}_{VGG} = \sum_{i} \|\phi_i(I_{\text{pred}}) - \phi_i(I_{\text{gt}})\|_2^2
+\end{equation}
+
+\textbf{2) Color \& Edge Loss:} To prevent color shifts, we adopt an angular color consistency loss~\cite{park2023dualcolor}:
+\begin{equation}
+\mathcal{L}_{color} = 1 - \frac{1}{HW}\sum \frac{\mathbf{I}_{\text{pred}} \cdot \mathbf{I}_{\text{gt}}}{\|\mathbf{I}_{\text{pred}}\|_2 \|\mathbf{I}_{\text{gt}}\|_2 + \epsilon}
+\end{equation}
+Edge preservation is enforced using Sobel operators $E(\cdot)$~\cite{edrnet2025edgematching}:
+\begin{equation}
+\mathcal{L}_{edge} = \|E(I_{\text{pred}}) - E(I_{\text{gt}})\|_1
+\end{equation}
+
+\textbf{3) Exposure Control Loss:} To prevent overexposure while preserving bright regions, we propose an exposure/highlight control loss~\cite{rlunet2024overexposure,afifi2021exposurecorrection,lee2022hsvnet,eilertsen2017singlehdr}:
+\begin{equation}
+\mathcal{L}_{exp} = \|\text{ReLU}(I_{\text{pred}} - \tau_h)\|_2^2 + \lambda_b \|M_b \odot (I_{\text{pred}} - I_{\text{gt}})\|_1
+\end{equation}
+where $\tau_h = 0.95$ is the highlight threshold, $M_b = \mathbf{1}[I_{\text{gt}} > 0.8]$ is a binary mask identifying bright regions in the ground truth, $\odot$ denotes element-wise multiplication, and $\lambda_b = 1.0$ is the bright region penalty weight.
+
+% ----------------------------------------------------------------
+% V. EXPERIMENTAL EVALUATION
+% ----------------------------------------------------------------
+\section{Experimental Evaluation}
+
+\subsection{Implementation Details}
+
+SwinLLIE employs an embedding dimension of 60, with encoder depths and attention heads of $[4, 4, 4]$ and $[6, 6, 6]$ respectively, a window size of 8, and an MLP ratio of 2.0, resulting in 4.68M parameters. The model was trained using PyTorch 2.8 on a single NVIDIA Tesla T4 16GB GPU. We used the AdamW optimizer ($\beta_1 = 0.9$, $\beta_2 = 0.999$, weight decay $10^{-4}$) with a cosine annealing schedule (initial learning rate $2 \times 10^{-4}$, min $10^{-6}$, 5 warmup epochs). Training utilized random $96 \times 96$ patches with a batch size of 8, gradient clipping at 1.0, and lasted approximately 34 minutes for 100 epochs. The loss weights were set to $\lambda_1 = 1.0$, $\lambda_v = 0.1$, $\lambda_c = 0.5$, $\lambda_e = 1.0$, and $\lambda_x = 1.0$. The best-performing model was selected based on validation PSNR.
+
+\subsection{Evaluation Metrics}
+
+To quantitatively evaluate the performance of SwinLLIE, we use two standard metrics: Peak Signal-to-Noise Ratio (PSNR) and Structural Similarity Index (SSIM).
+
+\textbf{1) PSNR:} Peak Signal-to-Noise Ratio measures the pixel-level fidelity between the enhanced image and the ground truth. It calculates the error between corresponding pixels, where a higher PSNR value indicates less error and better reconstruction quality.
+
+\textbf{2) SSIM:} The Structural Similarity Index measures the perceptual similarity between two images by considering luminance, contrast, and structure. SSIM values range from 0 to 1, with 1 indicating perfect structural similarity and a closer resemblance to the ground truth.
+
+\subsection{Quantitative Results}
+
+Table~\ref{tab:results} presents the quantitative comparison on the LOL dataset~\cite{lol_dataset}. Baseline results are cited from the CVPR 2023 benchmark~\cite{xu2023smg}.
+
+\begin{table}[htbp]
+\caption{Quantitative Comparison on LOL Dataset}
+\centering
+\begin{tabular}{lcc}
+\toprule
+\textbf{Method} & \textbf{PSNR $\uparrow$} & \textbf{SSIM $\uparrow$} \\
+\midrule
+\multicolumn{3}{l}{\textit{Classical Methods (2017-2021)}} \\
+SID & 13.24 & 0.442 \\
+DeepUPE & 13.27 & 0.452 \\
+RF (Retinex) & 14.05 & 0.458 \\
+FIDE & 16.85 & 0.678 \\
+3DLUT & 17.59 & 0.721 \\
+A3DLUT & 18.19 & 0.745 \\
+EnlightenGAN (EG) & 18.23 & 0.617 \\
+RetinexNet & 18.37 & 0.723 \\
+LCDR & 18.57 & 0.641 \\
+\midrule
+\multicolumn{3}{l}{\textit{Recent Transformer Methods (2022-2023)}} \\
+LLFormer~\cite{wang2023llformer} & 23.65 & 0.820 \\
+SNR-Net~\cite{xu2022snrnet} & 24.61 & 0.842 \\
+Retinexformer~\cite{cai2023retinexformer} & 25.16 & 0.855 \\
+\midrule
+\textbf{SwinLLIE (Ours, 4.68M params)} & \textbf{19.09} & \textbf{0.840} \\
+\bottomrule
+\end{tabular}
+\label{tab:results}
+\end{table}
+
+While recent transformer methods such as Retinexformer~\cite{cai2023retinexformer} achieve higher absolute PSNR, they rely on significantly larger architectures. SwinLLIE demonstrates that window-based attention mechanisms can achieve competitive perceptual quality (0.840 SSIM) with substantially fewer parameters (4.68M vs.\ 39.1M for SNR-Net). Notably, SwinLLIE surpasses all classical methods in both PSNR and SSIM, achieving +0.72 dB over RetinexNet and +3.84 dB over SID, while drastically outperforming EnlightenGAN in SSIM (0.840 vs.\ 0.617)~\cite{wang2004ssim}.
+
+Table~\ref{tab:efficiency} provides a parameter and computational efficiency comparison. GFLOPs are measured at a standard resolution of $400 \times 600$.
+
+\begin{table}[htbp]
+\caption{Model Efficiency Comparison}
+\centering
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Method} & \textbf{Params} & \textbf{GFLOPs} & \textbf{PSNR} & \textbf{SSIM} \\
+\midrule
+RetinexNet & 0.84M & -- & 18.37 & 0.723 \\
+\textbf{SwinLLIE (Ours)} & \textbf{4.68M} & \textbf{267.67} & \textbf{19.09} & \textbf{0.840} \\
+SNR-Net & 39.1M & -- & 24.61 & 0.842 \\
+\bottomrule
+\end{tabular}
+\label{tab:efficiency}
+\end{table}
+
+SwinLLIE requires 267.67 GFLOPs at $400 \times 600$ resolution, which, while non-trivial, is paired with a compact 4.68M parameter footprint an order of magnitude smaller than SNR-Net (39.1M). This compact design makes SwinLLIE significantly more amenable to deployment on memory-constrained edge devices.
+
+\subsection{Qualitative Analysis}
+
+Fig.~\ref{fig:qualitative} demonstrates representative visual enhancement results of SwinLLIE on the LOL test set. The proposed method effectively recovers brightness and color information while preserving structural details.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{qualitative_comparison_2.png}\\[2pt]
+\includegraphics[width=\columnwidth]{qualitative_comparison_7.png}
+\caption{Qualitative results on LOL dataset. Each row shows (a) low-light input, (b) SwinLLIE output, (c) ground truth. The proposed method effectively recovers natural illumination and colors while preserving fine details.}
+\label{fig:qualitative}
+\end{figure}
+
+\subsection{Discussion}
+
+The hybrid loss function combining L1, VGG perceptual, color consistency, edge preservation, and exposure control losses enables the model to balance multiple objectives simultaneously. The L1 loss ensures pixel-level reconstruction accuracy, while the VGG perceptual loss~\cite{johnson2016perceptual} maintains high-level feature similarity. The color consistency loss prevents the common issue of color shifts in enhanced images, and the edge loss preserves structural boundaries that are often degraded in low-light conditions. The exposure control loss specifically penalizes pixel values exceeding the highlight threshold $\tau_h = 0.95$, preventing the overexposure artifacts that commonly plague enhancement methods.
+
+\subsection{Cross-Dataset Generalization}
+
+To validate that SwinLLIE does not simply overfit to the 15 test images of LOL-v1, we perform a cross-dataset evaluation on LOL-v2 Real\_captured test set~\cite{yang2021lolv2}, which includes 100 completely unseen image pairs captured under diverse real-world conditions. As shown in Table~\ref{tab:generalization}, SwinLLIE maintains competitive performance, achieving 18.46 dB PSNR and 0.79 SSIM on LOL-v2 without any fine-tuning or domain adaptation. The modest PSNR decrease of 0.63 dB across datasets demonstrates robust generalization.
+
+\begin{table}[htbp]
+\caption{Cross-Dataset Generalization Results}
+\centering
+\begin{tabular}{lccc}
+\toprule
+\textbf{Dataset} & \textbf{Test Images} & \textbf{PSNR $\uparrow$} & \textbf{SSIM $\uparrow$} \\
+\midrule
+LOL-v1 (eval15) & 15 & 19.09 & 0.8401 \\
+LOL-v2 Real\_captured & 100 & 18.46 & 0.7896 \\
+\bottomrule
+\end{tabular}
+\label{tab:generalization}
+\end{table}
+
+\subsection{Visual Ablation Study}
+
+To qualitatively assess the contribution of each loss component, we visualize enhancement results from models trained with different loss configurations in Fig.~\ref{fig:ablation}. Using only the L1 reconstruction loss produces results that appear washed out with muted colors, as the model lacks perceptual guidance. Adding VGG perceptual and color consistency losses improves texture sharpness and color fidelity. The full loss configuration, including the exposure control loss, most effectively prevents overexposure in bright regions while maintaining natural contrast across the image. These visual results confirm the complementary nature of the proposed hybrid loss components.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{ablation_visual.png}
+\caption{Visual ablation of loss components. From left to right: (a) low-light input, (b) L1 loss only, (c) L1 + VGG + color loss, (d) full loss with exposure control, (e) ground truth. The full loss produces the most natural enhancement with controlled highlights.}
+\label{fig:ablation}
+\end{figure}
+
+\subsection{Limitations}
+
+While SwinLLIE achieves competitive SSIM (0.840) comparable to much larger models such as SNR-Net (0.842), a PSNR gap remains compared to recent heavy transformer architectures like Retinexformer (25.16 dB vs.\ 19.09 dB). This gap is primarily attributable to the compact model capacity (4.68M parameters). Additionally, inference at $400 \times 600$ resolution requires 267.67 GFLOPs, which may limit real-time deployment. Future work will explore knowledge distillation and model pruning to further optimize the efficiency-quality trade-off.
+
+% ----------------------------------------------------------------
+% VI. CONCLUSION
+% ----------------------------------------------------------------
+\section{Conclusion}
+
+This paper presents SwinLLIE, a Swin Transformer-based architecture for low-light image enhancement that combines multi-scale feature processing with an illumination-aware hybrid loss function. The method achieves 19.09 dB PSNR and 0.84 SSIM on the LOL-v1 benchmark while maintaining a compact footprint of 4.68M parameters. Crucially, cross-dataset evaluation on 100 unseen LOL-v2 image pairs confirms generalization (18.46 dB PSNR, 0.79 SSIM) without fine-tuning.
+
+The proposed five-component loss function particularly the exposure control loss effectively prevents color shifts and overexposure, addressing a persistent challenge in low-light enhancement. The window-based self-attention mechanism reduces computational complexity from $O(N^2)$ to $O(N \times w^2)$~\cite{liu2021swin}, and the compact parameter count makes the model amenable to edge deployment. Future work will focus on knowledge distillation for real-time inference, unsupervised training paradigms, and extension to video enhancement.
+
+% ----------------------------------------------------------------
+% REFERENCES
+% ----------------------------------------------------------------
+\begin{thebibliography}{00}
+
+\bibitem{liu2021swin}
+Z. Liu, Y. Lin, Y. Cao, H. Hu, Y. Wei, Z. Zhang, S. Lin, and B. Guo, ``Swin Transformer: Hierarchical Vision Transformer using Shifted Windows,'' in \textit{Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV)}, pp. 10012--10022, 2021.
+
+\bibitem{liang2021swinir}
+J. Liang, J. Cao, G. Sun, K. Zhang, L. Van Gool, and R. Timofte, ``SwinIR: Image Restoration Using Swin Transformer,'' in \textit{Proc. IEEE/CVF Int. Conf. Comput. Vis. Workshops (ICCVW)}, pp. 1833--1844, 2021. 
+
+\bibitem{land1977retinex}
+E. H. Land, ``The Retinex Theory of Color Vision,'' \textit{Scientific American}, vol. 237, no. 6, pp. 108--128, 1977.
+
+\bibitem{lore2017llnet}
+K. G. Lore, A. Akintayo, and S. Sarkar, ``LLNet: A Deep Autoencoder Approach to Natural Low-light Image Enhancement,'' \textit{Pattern Recognition}, vol. 61, pp. 650--662, 2017. 
+
+\bibitem{jiang2021enlightengan}
+Y. Jiang, X. Gong, D. Liu, Y. Cheng, C. Fang, X. Shen, J. Yang, P. Zhou, and Z. Wang, ``EnlightenGAN: Deep Light Enhancement without Paired Supervision,'' \textit{IEEE Trans. Image Process.}, vol. 30, pp. 2340--2349, 2021. 
+
+\bibitem{guo2020zero}
+C. Guo, C. Li, J. Guo, C. C. Loy, J. Hou, S. Kwong, and R. Cong, ``Zero-Reference Deep Curve Estimation for Low-Light Image Enhancement,'' in \textit{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)}, pp. 1780--1789, 2020. 
+
+\bibitem{lol_dataset}
+C. Wei, W. Wang, W. Yang, and J. Liu, ``Deep Retinex Decomposition for Low-Light Enhancement,'' in \textit{Proc. Brit. Mach. Vis. Conf. (BMVC)}, 2018. 
+
+\bibitem{vaswani2017attention}
+A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez, L. Kaiser, and I. Polosukhin, ``Attention Is All You Need,'' in \textit{Advances in Neural Information Processing Systems}, vol. 30, 2017. 
+
+\bibitem{johnson2016perceptual}
+J. Johnson, A. Alahi, and L. Fei-Fei, ``Perceptual Losses for Real-Time Style Transfer and Super-Resolution,'' in \textit{Proc. European Conf. Comput. Vis. (ECCV)}, pp. 694--711, 2016. 
+
+\bibitem{xu2023smg}
+X. Xu, R. Wang, C.-W. Fu, and J. Jia, ``Low-Light Image Enhancement via Structure Modeling and Guidance,'' in \textit{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)}, pp. 9893--9903, 2023. 
+
+\bibitem{xu2022snrnet}
+X. Xu, R. Wang, C.-W. Fu, and J. Jia, ``SNR-Aware Low-Light Image Enhancement,'' in \textit{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)}, pp. 17714--17724, 2022.
+
+\bibitem{cai2023retinexformer}
+Y. Cai, H. Bian, J. Peng, N. Cao, Q. H. Nguyen, Y. Shen, and L. Zhang, ``Retinexformer: One-stage Retinex-based Transformer for Low-light Image Enhancement,'' in \textit{Proc. IEEE/CVF Int. Conf. Comput. Vis. (ICCV)}, pp. 12504--12513, 2023.
+
+\bibitem{wang2023llformer}
+T. Wang, K. Zhang, T. Shen, W. Luo, B. Stenger, and T. Lu, ``Ultra-High-Definition Low-Light Image Enhancement: A Benchmark and Transformer-Based Method,'' in \textit{Proc. AAAI Conf. Artif. Intell.}, vol. 37, pp. 2654--2662, 2023.
+
+\bibitem{ronneberger2015unet}
+O. Ronneberger, P. Fischer, and T. Brox, ``U-Net: Convolutional Networks for Biomedical Image Segmentation,'' in \textit{Proc. Int. Conf. Med. Image Comput. Comput.-Assist. Interv. (MICCAI)}, pp. 234--241, 2015.
+
+\bibitem{wang2004ssim}
+Z. Wang, A. C. Bovik, H. R. Sheikh, and E. P. Simoncelli, ``Image Quality Assessment: From Error Visibility to Structural Similarity,'' \textit{IEEE Trans. Image Process.}, vol. 13, no. 4, pp. 600--612, 2004.
+
+\bibitem{isola2016pix2pix}
+P. Isola, J.-Y. Zhu, T. Zhou, and A. A. Efros, ``Image-to-Image Translation with Conditional Adversarial Networks,'' \textit{arXiv preprint arXiv:1611.07004}, 2016.
+
+\bibitem{ledig2016srgan}
+C. Ledig, L. Theis, F. Husz{\'a}r, J. Caballero, A. Cunningham, A. Acosta, A. Aitken, A. Tejani, J. Totz, Z. Wang, and W. Shi, ``Photo-Realistic Single Image Super-Resolution Using a Generative Adversarial Network,'' \textit{arXiv preprint arXiv:1609.04802}, 2016.
+
+\bibitem{zhang2018lpips}
+R. Zhang, P. Isola, A. A. Efros, E. Shechtman, and O. Wang, ``The Unreasonable Effectiveness of Deep Features as a Perceptual Metric,'' in \textit{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2018.
+
+\bibitem{simonyan2014vgg}
+K. Simonyan and A. Zisserman, ``Very Deep Convolutional Networks for Large-Scale Image Recognition,'' \textit{arXiv preprint arXiv:1409.1556}, 2014.
+
+\bibitem{park2023dualcolor}
+P. Park, H. Oh, and H. Kim, ``Dual-color space network with global priors for photo retouching,'' \textit{Scientific Reports}, vol. 13, Art. no. 19798, 2023, doi: 10.1038/s41598-023-47186-6.
+
+\bibitem{edrnet2025edgematching}
+F. Sun, B. Li, and Q. Zhang, ``EDRNet: Edge-Enhanced Dynamic Routing Adaptive for Depth Completion,'' \textit{Mathematics}, vol. 13, no. 6, Art. no. 953, 2025, doi: 10.3390/math13060953.
+
+\bibitem{rlunet2024overexposure}
+Y. Zheng, W. Wang, X. Wang, and X. Yuan, ``RLUNet: Overexposure-Content-Recovery-Based Single HDR Image Reconstruction with the Imaging Pipeline Principle,'' \textit{Applied Sciences}, vol. 14, no. 23, Art. no. 11289, 2024, doi: 10.3390/app142311289.
+
+\bibitem{afifi2021exposurecorrection}
+M. Afifi, K. G. Derpanis, B. Ommer, and M. S. Brown, ``Learning Multi-Scale Photo Exposure Correction,'' in \textit{Proc. IEEE/CVF Conf. Comput. Vis. Pattern Recognit. (CVPR)}, 2021. 
+
+\bibitem{lee2022hsvnet}
+M. J. Lee, C.-h. Rhee, and C. H. Lee, ``HSVNet: Reconstructing HDR Image from a Single Exposure LDR Image with CNN,'' \textit{Applied Sciences}, vol. 12, no. 5, Art. no. 2370, 2022, doi: 10.3390/app12052370.
+
+\bibitem{eilertsen2017singlehdr}
+G. Eilertsen, J. Kronander, G. Denes, R. K. Mantiuk, and J. Unger, ``HDR image reconstruction from a single exposure using deep CNNs,'' \textit{ACM Trans. Graph.}, vol. 36, no. 6, Art. no. 178, 2017, doi: 10.1145/3130800.3130816.
+
+\bibitem{lehmann2025perceptually}
+P. Lehmann and P. Rokita, ``Perceptually Optimised Swin-Unet for Low-light Image Enhancement,'' \textit{arXiv preprint}, 2025.
+
+\bibitem{yang2021lolv2}
+W. Yang, W. Wang, H. Huang, S. Wang, and J. Liu, ``Sparse Gradient Regularized Deep Retinex Network for Robust Low-Light Image Enhancement,'' \textit{IEEE Trans. Image Process.}, vol. 30, pp. 2072--2086, 2021.
+
+\end{thebibliography}
+
+\end{document}
